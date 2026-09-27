@@ -46,12 +46,22 @@ def _pick(specs: dict[str, ModelSpec], ids: list[str]) -> list[ModelSpec] | None
     return [specs[m] for m in ids]
 
 
+def _with_effort(spec: ModelSpec, effort: str) -> ModelSpec:
+    if spec.adapter != "openai_responses":
+        return spec
+    return spec.model_copy(update={"params": {**spec.params, "reasoning": {"effort": effort}}})
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     specs = load_models(args.models_file)
     chosen = _pick(specs, [m.strip() for m in args.models.split(",") if m.strip()])
     judge = _pick(specs, [args.judge]) if args.judge else []
     if chosen is None or judge is None:
         return 2
+    if args.reasoning_effort:
+        chosen = [_with_effort(s, args.reasoning_effort) for s in chosen]
+        judge = [_with_effort(s, args.reasoning_effort) for s in judge]
+        specs = {**specs, **{s.id: s for s in chosen + judge}}
     judge_spec = judge[0] if judge else None
     weights = load_weights(args.weights_file)
     names = resolve_suites(args.suite)
@@ -74,7 +84,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             f"x {len(chosen)} models ",
             end="",
         )
-        rows = run_suite(chosen, suite, args.reps, _progress, judge_spec)
+        rows = run_suite(chosen, suite, args.reps, _progress, judge_spec, args.workers)
         print()
         attempts += rows
         if judge_spec and baseline and suite.judge_rubric and not args.no_pairwise:
@@ -169,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--suite", default="all", help="'all' or comma-separated suite names")
     run.add_argument("--reps", type=int, default=3)
     run.add_argument("--judge", help="model id to use as LLM judge for rubric suites")
+    run.add_argument("--workers", type=int, default=1, help="concurrent attempts")
+    run.add_argument(
+        "--reasoning-effort", help="override reasoning.effort for Responses-API models"
+    )
     run.add_argument("--no-pairwise", action="store_true", help="skip pairwise judge vs baseline")
     run.add_argument("--out", default="runs")
     run.add_argument("--history", default="runs/history.sqlite")

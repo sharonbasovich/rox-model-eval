@@ -20,6 +20,15 @@ from .base import ModelAdapter
 _FIRST_TOKEN_EVENTS = {"response.output_text.delta", "response.function_call_arguments.delta"}
 
 
+_RETRY_DELAYS_S = (2.0, 5.0, 15.0, 30.0)
+
+
+def _retryable(error: str | None) -> bool:
+    return bool(error) and str(error).startswith(
+        ("HTTP 429", "HTTP 5", "stream ended", "transport ")
+    )
+
+
 def to_responses_input(messages: list[Message]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for m in messages:
@@ -78,6 +87,16 @@ def parse_usage(u: dict[str, Any] | None) -> Usage:
 
 class OpenAIResponsesAdapter(ModelAdapter):
     def complete(self, request: ModelRequest) -> ModelResponse:
+        """Retries rate limits, server errors and dropped connections with backoff."""
+        response = self._complete_once(request)
+        for delay in _RETRY_DELAYS_S:
+            if not _retryable(response.error):
+                break
+            time.sleep(delay)
+            response = self._complete_once(request)
+        return response
+
+    def _complete_once(self, request: ModelRequest) -> ModelResponse:
         key_env = self.spec.api_key_env or "OPENAI_API_KEY"
         api_key = os.environ.get(key_env)
         if not api_key:
@@ -121,7 +140,7 @@ class OpenAIResponsesAdapter(ModelAdapter):
                     if kind in ("response.completed", "response.incomplete", "response.failed"):
                         final = event.get("response") or {}
         except httpx.HTTPError as exc:
-            return ModelResponse(error=f"{type(exc).__name__}: {exc}")
+            return ModelResponse(error=f"transport {type(exc).__name__}: {exc}")
 
         if final is None:
             return ModelResponse(error="stream ended without a completed response")

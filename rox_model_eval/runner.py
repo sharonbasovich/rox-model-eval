@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from .adapters import ModelAdapter, build_adapter
@@ -130,45 +131,67 @@ def run_suite(
     reps: int = 3,
     on_attempt: ProgressFn | None = None,
     judge: ModelSpec | None = None,
+    workers: int = 1,
 ) -> list[Attempt]:
+    """Run every (model, task, rep); results keep that order regardless of `workers`."""
     judge_adapter = build_adapter(judge) if judge and suite.judge_rubric else None
-    attempts: list[Attempt] = []
-    for spec in specs:
-        adapter = build_adapter(spec)
-        for task in suite.tasks:
-            for rep in range(reps):
-                response, output = execute(adapter, suite, task, rep)
-                scores = score_attempt(suite, task, response, output)
-                cost = spec.cost_usd(response.usage)
-                if judge_adapter and not response.error:
-                    oracle = None
-                    if judge_adapter.spec.adapter == "mock":
-                        level = 1 + 4 * scores.score
-                        oracle = {"judge_scores": {k: level for k in _criteria(suite)}}
-                    j, _ = judge_rubric(judge_adapter, suite, task, output.text, oracle)
-                    if j is not None:
-                        blended = (1 - JUDGE_WEIGHT) * scores.score + JUDGE_WEIGHT * j
-                        scores = scores.model_copy(
-                            update={
-                                "judge_score": j,
-                                "score": round(blended, 4),
-                                "passed": scores.passed and j >= 0.5,
-                            }
-                        )
-                attempt = Attempt(
-                    model_id=spec.id,
-                    capability=suite.capability,
-                    task_id=task.id,
-                    rep=rep,
-                    response=response,
-                    trajectory=output.trajectory,
-                    scores=scores,
-                    cost_usd=cost,
-                )
-                attempts.append(attempt)
-                if on_attempt:
-                    on_attempt(attempt)
-    return attempts
+    jobs = [
+        (spec, adapter, task, rep)
+        for spec in specs
+        for adapter in [build_adapter(spec)]
+        for task in suite.tasks
+        for rep in range(reps)
+    ]
+
+    def one(job: tuple[ModelSpec, ModelAdapter, Task, int]) -> Attempt:
+        spec, adapter, task, rep = job
+        attempt = _attempt(spec, adapter, suite, task, rep, judge_adapter)
+        if on_attempt:
+            on_attempt(attempt)
+        return attempt
+
+    if workers <= 1:
+        return [one(j) for j in jobs]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(one, jobs))
+
+
+def _attempt(
+    spec: ModelSpec,
+    adapter: ModelAdapter,
+    suite: Suite,
+    task: Task,
+    rep: int,
+    judge_adapter: ModelAdapter | None,
+) -> Attempt:
+    response, output = execute(adapter, suite, task, rep)
+    scores = score_attempt(suite, task, response, output)
+    cost = spec.cost_usd(response.usage)
+    if judge_adapter and not response.error:
+        oracle = None
+        if judge_adapter.spec.adapter == "mock":
+            level = 1 + 4 * scores.score
+            oracle = {"judge_scores": {k: level for k in _criteria(suite)}}
+        j, _ = judge_rubric(judge_adapter, suite, task, output.text, oracle)
+        if j is not None:
+            blended = (1 - JUDGE_WEIGHT) * scores.score + JUDGE_WEIGHT * j
+            scores = scores.model_copy(
+                update={
+                    "judge_score": j,
+                    "score": round(blended, 4),
+                    "passed": scores.passed and j >= 0.5,
+                }
+            )
+    return Attempt(
+        model_id=spec.id,
+        capability=suite.capability,
+        task_id=task.id,
+        rep=rep,
+        response=response,
+        trajectory=output.trajectory,
+        scores=scores,
+        cost_usd=cost,
+    )
 
 
 def _criteria(suite: Suite) -> list[str]:
