@@ -78,9 +78,16 @@ def test_cli_writes_scorecard(tmp_path: Path) -> None:
             str(ROOT / "suites"),
             "--out",
             str(tmp_path),
+            "--history",
+            str(tmp_path / "history.sqlite"),
         ]
     )
     assert code == 0
-    (run_dir,) = tmp_path.iterdir()
-    assert {p.name for p in run_dir.iterdir()} == {"attempts.jsonl", "summary.json", "scorecard.md"}
+    (run_dir,) = [p for p in tmp_path.iterdir() if p.is_dir()]
+    assert {p.name for p in run_dir.iterdir()} == {
+        "attempts.jsonl",
+        "summary.json",
+        "scorecard.md",
+        "scorecard.html",
+    }
     assert "offline simulator" in (run_dir / "scorecard.md").read_text()

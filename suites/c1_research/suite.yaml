@@ -1,0 +1,141 @@
+capability: c1_research
+name: Account research synthesis
+description: >
+  Pre-call account briefs built from a bundle of retrieved sources (press releases, job
+  posts, news, the prospect's site). The model must cover the signals a rep needs, cite a
+  real source for every fact, and never state numbers or events the sources do not contain.
+  Traps: a similarly named company, stale vs. updated facts, and thin source bundles.
+scorer: research
+system: >
+  You are the account-research agent of a revenue platform. Write briefs only from the
+  numbered sources provided. Every fact must cite exactly one source id (e.g. "S2"). If
+  sources conflict, prefer the most recent and say so. If something important is unknown,
+  list it under open_questions instead of guessing. Respond with JSON only.
+prompt_template: |
+  Prepare a pre-call brief on {{company}} for an account executive.
+
+  Return: {"summary": "<2-4 sentences>", "facts": [{"claim": "...", "source": "S1"}],
+  "open_questions": ["..."]}
+
+  SOURCES:
+  {{sources}}
+judge_rubric:
+  - "groundedness: every statement is supported by the cited source; nothing invented"
+  - "relevance: focuses on signals that matter for a sales conversation (funding, hiring, leadership, pain)"
+  - "synthesis: connects facts into an angle the rep can use rather than listing them"
+  - "concision: brief a busy rep can read in under a minute"
+tasks:
+  - id: c1-001-funding-hiring
+    tags: [funding, hiring, leadership]
+    inputs:
+      company: Lumenfold Analytics
+      sources: |
+        [S1] 2026-03-04 press release: Lumenfold Analytics raises $48M Series B led by Northbeam Ventures to expand its supply-chain forecasting platform. The company has 340 employees.
+        [S2] 2026-06 job board: Lumenfold is hiring 14 roles in Revenue Operations and Sales Development in Austin.
+        [S3] 2026-05-20 news: Lumenfold appoints Maya Chen, formerly of Datalyst, as Chief Revenue Officer.
+    expected:
+      source_ids: [S1, S2, S3]
+      must_cover: [["Series B"], ["$48M", "48 million", "$48 million"], ["Maya Chen"], ["revenue operations", "revops", "sales development"]]
+      forbidden: ["IPO", "acquired by"]
+    reference_output:
+      summary: Lumenfold Analytics closed a $48M Series B and hired Maya Chen as CRO, and is now scaling Revenue Operations and Sales Development. A new revenue leader building a team is a strong moment to discuss pipeline tooling.
+      facts:
+        - {claim: "Raised a $48M Series B led by Northbeam Ventures", source: S1}
+        - {claim: "Has 340 employees", source: S1}
+        - {claim: "Hiring 14 Revenue Operations and Sales Development roles in Austin", source: S2}
+        - {claim: "Maya Chen joined as Chief Revenue Officer from Datalyst", source: S3}
+      open_questions: ["What CRM and sales tooling does the team use today?"]
+
+  - id: c1-002-name-collision
+    tags: [entity-disambiguation, trap]
+    inputs:
+      company: Harbor Health (harborhealth.io)
+      sources: |
+        [S1] harborhealth.io about page: Harbor Health builds patient-intake automation for outpatient clinics, serving 1,200 clinics across the US.
+        [S2] 2026-04-11 news: Harborside Health Systems, a Florida hospital network, announces layoffs of 600 staff.
+        [S3] 2026-07 harborhealth.io blog: Harbor Health launches an EHR integration marketplace with 30 partners.
+    expected:
+      source_ids: [S1, S3]
+      must_cover: [["patient-intake", "patient intake"], ["marketplace"]]
+      forbidden: ["layoff", "600 staff", "hospital network"]
+    reference_output:
+      summary: Harbor Health automates patient intake for outpatient clinics and just launched an EHR integration marketplace. Note that S2 is about Harborside Health Systems, a different company, and was excluded.
+      facts:
+        - {claim: "Builds patient-intake automation for outpatient clinics, serving 1,200 clinics", source: S1}
+        - {claim: "Launched an EHR integration marketplace with 30 partners", source: S3}
+      open_questions: ["Headcount and funding are not stated in the sources."]
+
+  - id: c1-003-conflicting-hq
+    tags: [conflict, recency]
+    inputs:
+      company: Quillmesh
+      sources: |
+        [S1] 2024-02 profile: Quillmesh, a Denver-based workflow startup with 25 employees.
+        [S2] 2026-01-15 news: Quillmesh relocates headquarters to Toronto and now has 60 employees; remains bootstrapped.
+        [S3] quillmesh.ai: "Automate procurement approvals across Slack and email."
+    expected:
+      source_ids: [S1, S2, S3]
+      must_cover: [["Toronto"], ["60"], ["bootstrapped"], ["procurement"]]
+      forbidden: ["headquartered in Denver", "based in Denver", "Series A"]
+    reference_output:
+      summary: Quillmesh automates procurement approvals across Slack and email. It moved its headquarters from Denver to Toronto in 2026, has grown to 60 employees and is still bootstrapped.
+      facts:
+        - {claim: "Headquarters relocated to Toronto in 2026 (S1 from 2024 listed Denver)", source: S2}
+        - {claim: "Has 60 employees and remains bootstrapped", source: S2}
+        - {claim: "Automates procurement approvals across Slack and email", source: S3}
+      open_questions: ["Who owns procurement tooling decisions?"]
+
+  - id: c1-004-thin-sources
+    tags: [sparse, fabrication-trap]
+    inputs:
+      company: Ferrovane
+      sources: |
+        [S1] ferrovane.com: Ferrovane makes predictive maintenance software for rail operators. Headquartered in Montreal. Listed on the TSX.
+    expected:
+      source_ids: [S1]
+      must_cover: [["predictive maintenance"], ["rail"], ["Montreal"]]
+      forbidden: ["Series", "employees", "revenue of"]
+    reference_output:
+      summary: Ferrovane is a TSX-listed, Montreal-based vendor of predictive maintenance software for rail operators. The single source gives no headcount, financials or leadership detail.
+      facts:
+        - {claim: "Makes predictive maintenance software for rail operators", source: S1}
+        - {claim: "Headquartered in Montreal and listed on the TSX", source: S1}
+      open_questions: ["Headcount?", "Current leadership and buying committee?", "Recent news or initiatives?"]
+
+  - id: c1-005-leadership-change
+    tags: [recency, leadership]
+    inputs:
+      company: Brightkeel Logistics
+      sources: |
+        [S1] 2025-09 news: Brightkeel Logistics CEO Aaron Pike outlines plan to digitize freight procurement.
+        [S2] 2026-08-02 press release: Brightkeel names Lucia Ferrer CEO; Aaron Pike steps down. Ferrer previously ran operations at Portwise.
+        [S3] 2026-08 job board: Brightkeel is hiring a Head of Sales Operations.
+    expected:
+      source_ids: [S1, S2, S3]
+      must_cover: [["Lucia Ferrer"], ["Sales Operations"], ["freight"]]
+      forbidden: ["CEO Aaron Pike leads", "Aaron Pike is CEO", "Aaron Pike is the CEO"]
+    reference_output:
+      summary: Brightkeel Logistics has a new CEO, Lucia Ferrer (ex-Portwise operations), replacing Aaron Pike, who had pushed to digitize freight procurement. It is hiring a Head of Sales Operations, so the go-to-market stack may be up for review.
+      facts:
+        - {claim: "Lucia Ferrer named CEO in August 2026; Aaron Pike stepped down", source: S2}
+        - {claim: "Previous CEO planned to digitize freight procurement", source: S1}
+        - {claim: "Hiring a Head of Sales Operations", source: S3}
+      open_questions: ["Will the new CEO keep the freight digitization plan?"]
+
+  - id: c1-006-negative-signal
+    tags: [risk]
+    inputs:
+      company: Tidepool Robotics
+      sources: |
+        [S1] 2026-02 news: Tidepool Robotics closes seed round to build warehouse inspection robots; team of 12 in Oakland.
+        [S2] 2026-09-01 news: Tidepool Robotics announces a hiring freeze and pauses its European expansion.
+    expected:
+      source_ids: [S1, S2]
+      must_cover: [["hiring freeze"], ["seed"], ["warehouse inspection"]]
+      forbidden: ["rapid growth", "expanding into Europe", "Series A"]
+    reference_output:
+      summary: Tidepool Robotics is a seed-stage warehouse inspection robotics company with 12 people in Oakland. It just announced a hiring freeze and paused its European expansion, so budgets are likely tight; lead with cost savings.
+      facts:
+        - {claim: "Seed-funded maker of warehouse inspection robots with a team of 12 in Oakland", source: S1}
+        - {claim: "Announced a hiring freeze and paused European expansion", source: S2}
+      open_questions: ["Is any tooling budget still available this year?"]

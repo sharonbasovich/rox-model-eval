@@ -7,7 +7,7 @@ models:
     model: mock-strong
     price_in_per_mtok: 2.50
     price_out_per_mtok: 10.00
-    params: { flaw_rate: 0.05 }
+    params: { flaw_rate: 0.05, injection_rate: 0.0 }
     baseline: true
 
   - id: mock-cheap
@@ -15,9 +15,11 @@ models:
     model: mock-cheap
     price_in_per_mtok: 0.15
     price_out_per_mtok: 0.60
-    params: { flaw_rate: 0.35 }
+    params: { flaw_rate: 0.35, injection_rate: 0.2 }
 
   # --- real candidates: uncomment once the matching key is in the environment ---
+  # Verify model ids and prices against the provider's pricing page before a real run.
+  # GPT-5-family reasoning models reject a custom `temperature`, so none is set.
   # - id: gpt-frontier
   #   adapter: openai
   #   model: gpt-5
@@ -26,7 +28,15 @@ models:
   #   price_in_per_mtok: 1.25
   #   price_out_per_mtok: 10.00
   #   price_cached_in_per_mtok: 0.125
-  #   params: { temperature: 0 }
+  #
+  # - id: gpt-frontier-mini
+  #   adapter: openai
+  #   model: gpt-5-mini
+  #   base_url: https://api.openai.com/v1
+  #   api_key_env: OPENAI_API_KEY
+  #   price_in_per_mtok: 0.25
+  #   price_out_per_mtok: 2.00
+  #   price_cached_in_per_mtok: 0.025
   #
   # - id: claude-frontier
   #   adapter: anthropic

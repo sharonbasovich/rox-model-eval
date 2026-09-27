@@ -13,8 +13,25 @@ from typing import Any
 
 import httpx
 
-from ..types import ModelRequest, ModelResponse, Timings, ToolCall, Usage
+from ..types import Message, ModelRequest, ModelResponse, Timings, ToolCall, Usage
 from .base import ModelAdapter
+
+
+def to_openai_message(m: Message) -> dict[str, Any]:
+    out: dict[str, Any] = {"role": m.role, "content": m.content}
+    if m.tool_calls:
+        out["content"] = m.content or None
+        out["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+            }
+            for tc in m.tool_calls
+        ]
+    if m.role == "tool":
+        out["tool_call_id"] = m.tool_call_id
+    return out
 
 
 class OpenAICompatibleAdapter(ModelAdapter):
@@ -26,7 +43,7 @@ class OpenAICompatibleAdapter(ModelAdapter):
 
         body: dict[str, Any] = {
             "model": self.spec.model,
-            "messages": [m.model_dump() for m in request.messages],
+            "messages": [to_openai_message(m) for m in request.messages],
             "stream": True,
             "stream_options": {"include_usage": True},
             **{k: v for k, v in self.spec.params.items()},
@@ -77,7 +94,10 @@ class OpenAICompatibleAdapter(ModelAdapter):
                         if delta.get("content"):
                             text_parts.append(delta["content"])
                         for tc in delta.get("tool_calls") or []:
-                            slot = tool_buf.setdefault(tc["index"], {"name": "", "args": ""})
+                            slot = tool_buf.setdefault(
+                                tc["index"], {"id": "", "name": "", "args": ""}
+                            )
+                            slot["id"] = slot["id"] or tc.get("id") or ""
                             fn = tc.get("function", {})
                             slot["name"] += fn.get("name") or ""
                             slot["args"] += fn.get("arguments") or ""
@@ -90,7 +110,7 @@ class OpenAICompatibleAdapter(ModelAdapter):
                 args = json.loads(slot["args"] or "{}")
             except json.JSONDecodeError:
                 args = {"_unparseable": slot["args"]}
-            tool_calls.append(ToolCall(name=slot["name"], arguments=args))
+            tool_calls.append(ToolCall(id=slot["id"], name=slot["name"], arguments=args))
 
         return ModelResponse(
             text="".join(text_parts),

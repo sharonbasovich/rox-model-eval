@@ -200,13 +200,13 @@ Stack: Python 3.11, async httpx, pydantic models, YAML-driven suites, SQLite for
 
 ## 9. Implementation phases
 
-- **Phase 0 — skeleton (this PR):** repo scaffold, `ModelAdapter` interface + real adapters (OpenAI-compatible incl. Rox gateway, Anthropic) + offline simulator, `models.yaml`, one runnable capability suite (C6 extraction — fully deterministic, no judge needed), cost/latency capture, a Markdown scorecard (HTML + charts land in Phase 3). End state: `python -m rox_model_eval run --models X,Y --suite c6_extraction` produces a scorecard. **Proves the loop end-to-end.**
-- **Phase 1 — breadth:** add C1, C4, C5 (research, grounded Q&A, tool-calling) + groundedness scorer + tool-validity scorer.
-- **Phase 2 — judge + safety:** LLM-judge with calibration harness, C2/C3, C8 injection suite (ties to the security follow-ups).
-- **Phase 3 — recommender + regression:** weighted fitness score, routing table, Pareto, baseline diff, HTML scorecard polish.
-- **Phase 4 — long-context + CI:** C7, a `make eval` that runs a fast subset on every new model config, optional scheduled run when a new model ships.
+Status: all phases below are implemented (offline-verified with the simulator; live-model runs need provider keys).
 
-Rough effort: Phase 0 in this session; each subsequent phase ≈ one focused session.
+- **Phase 0 — skeleton:** `ModelAdapter` interface + OpenAI-compatible (incl. Rox gateway), Anthropic and offline-simulator adapters, `models.yaml`, C6 extraction, cost/latency capture, scorecard.
+- **Phase 1 — breadth:** C1 research (citation validity + unsupported-number check), C4 grounded Q&A (abstention), C5 multi-step tool calling against scripted tool backends.
+- **Phase 2 — judge + safety:** rubric LLM judge blended into C1/C2/C3 quality, pairwise preference vs baseline (both orders), `rox-eval calibrate` against human labels, C2 drafting, C3 prioritisation, C8 injection/leak/tool-abuse/over-refusal suite.
+- **Phase 3 — recommender + regression:** format + safety gates, weighted Rox Fitness Score, overall verdict, routing table (quality pick / value pick), Pareto frontier, SQLite history with regression flags on unchanged suites, HTML scorecard with a cost/quality chart.
+- **Phase 4 — long-context + CI:** C7 with deterministic generated transcripts (6k–20k words, planted needles and superseded values), GitHub Actions running lint, types, tests and an offline end-to-end eval.
 
 ---
 

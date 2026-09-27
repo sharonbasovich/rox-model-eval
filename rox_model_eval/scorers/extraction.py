@@ -11,23 +11,13 @@ strict records. What matters in production:
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
 import jsonschema
 
-from ..types import ScoreBreakdown
-
-_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
-
-
-def _parse_json(text: str) -> dict[str, Any] | None:
-    try:
-        value = json.loads(_FENCE.sub("", text.strip()))
-    except json.JSONDecodeError:
-        return None
-    return value if isinstance(value, dict) else None
+from ..types import RunOutput, ScoreBreakdown, Suite, Task
+from .common import parse_json
 
 
 def _normalize(value: Any) -> Any:
@@ -41,15 +31,21 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def score_extraction(
+def score_record(
     output_text: str,
     expected: dict[str, Any],
     json_schema: dict[str, Any] | None,
     pass_threshold: float = 1.0,
 ) -> ScoreBreakdown:
-    parsed = _parse_json(output_text)
-    if parsed is None:
-        return ScoreBreakdown(passed=False, score=0.0, notes=["output is not a JSON object"])
+    parsed = parse_json(output_text)
+    if not isinstance(parsed, dict):
+        return ScoreBreakdown(
+            passed=False,
+            score=0.0,
+            format_valid=False,
+            metrics={"json_valid": 0.0, "schema_valid": 0.0, "field_accuracy": 0.0},
+            notes=["output is not a JSON object"],
+        )
 
     notes: list[str] = []
     schema_valid = True
@@ -81,9 +77,16 @@ def score_extraction(
     return ScoreBreakdown(
         passed=schema_valid and field_accuracy >= pass_threshold,
         score=round(score, 4),
-        json_valid=True,
-        schema_valid=schema_valid,
-        field_accuracy=round(field_accuracy, 4),
-        fabrication_rate=round(fabrication_rate, 4),
+        format_valid=schema_valid,
+        fabrication=round(fabrication_rate, 4),
+        metrics={
+            "json_valid": 1.0,
+            "schema_valid": float(schema_valid),
+            "field_accuracy": round(field_accuracy, 4),
+        },
         notes=notes,
     )
+
+
+def score_extraction(suite: Suite, task: Task, output: RunOutput) -> ScoreBreakdown:
+    return score_record(output.text, task.expected, suite.json_schema)

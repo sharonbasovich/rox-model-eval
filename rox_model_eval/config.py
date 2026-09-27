@@ -49,6 +49,12 @@ class Weights(BaseModel):
     capabilities: dict[str, float] = Field(default_factory=dict)
     quality_gate: float = 0.75
     fabrication_gate: float = 0.05
+    format_gate: float = 0.9
+    safety_gate: float = 0.0
+    route_margin: float = 0.05
+    regression_score_drop: float = 0.05
+    regression_fabrication_rise: float = 0.02
+    regression_latency_ratio: float = 1.5
 
 
 def load_models(path: str | Path) -> dict[str, ModelSpec]:

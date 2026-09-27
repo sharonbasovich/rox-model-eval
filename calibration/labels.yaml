@@ -1,0 +1,53 @@
+# Human 1-5 labels on fixed outputs, one score per rubric criterion of the suite.
+# `rox-eval calibrate --judge <model>` scores the same outputs with the judge and reports
+# Spearman correlation, mean absolute error and within-one-point agreement.
+# Replace/extend with labels from Rox reviewers before trusting a judge for decisions.
+labels:
+  - suite: c1_research
+    task_id: c1-001-funding-hiring
+    output: '{"summary": "Lumenfold closed a $48M Series B and hired Maya Chen as CRO; it is hiring 14 RevOps and SDR roles.", "facts": [{"claim": "$48M Series B led by Northbeam", "source": "S1"}, {"claim": "Maya Chen is CRO", "source": "S3"}, {"claim": "Hiring 14 RevOps/SDR roles", "source": "S2"}], "open_questions": ["Current CRM?"]}'
+    human: {groundedness: 5, relevance: 5, synthesis: 4, concision: 5}
+  - suite: c1_research
+    task_id: c1-001-funding-hiring
+    output: '{"summary": "Lumenfold is a fast-growing unicorn that just IPOd and has 2,000 employees.", "facts": [{"claim": "IPO in 2026", "source": "S4"}], "open_questions": []}'
+    human: {groundedness: 1, relevance: 2, synthesis: 1, concision: 3}
+  - suite: c1_research
+    task_id: c1-002-name-collision
+    output: '{"summary": "Harbor Health automates patient intake but recently laid off 600 staff.", "facts": [{"claim": "Patient intake automation", "source": "S1"}, {"claim": "600 layoffs", "source": "S2"}], "open_questions": []}'
+    human: {groundedness: 2, relevance: 3, synthesis: 2, concision: 4}
+  - suite: c1_research
+    task_id: c1-002-name-collision
+    output: '{"summary": "Harbor Health builds patient-intake automation for 1,200 clinics and launched an EHR integration marketplace. S2 concerns a different company.", "facts": [{"claim": "Serves 1,200 clinics", "source": "S1"}, {"claim": "EHR marketplace with 30 partners", "source": "S3"}], "open_questions": ["Headcount?"]}'
+    human: {groundedness: 5, relevance: 4, synthesis: 4, concision: 5}
+  - suite: c1_research
+    task_id: c1-004-thin-sources
+    output: '{"summary": "Ferrovane is a TSX-listed rail predictive-maintenance vendor in Montreal.", "facts": [{"claim": "Rail predictive maintenance", "source": "S1"}], "open_questions": ["Headcount?", "Leadership?"]}'
+    human: {groundedness: 5, relevance: 3, synthesis: 3, concision: 5}
+  - suite: c1_research
+    task_id: c1-004-thin-sources
+    output: '{"summary": "Ferrovane is a 900-person company that raised a Series C and is expanding into Asia. It dominates rail maintenance software and is growing fast; they are likely to buy soon given their aggressive hiring.", "facts": [{"claim": "900 employees", "source": "S1"}, {"claim": "Series C", "source": "S1"}], "open_questions": []}'
+    human: {groundedness: 1, relevance: 2, synthesis: 2, concision: 2}
+  - suite: c2_drafting
+    task_id: c2-001-first-touch
+    output: '{"subject": "Scaling Lumenfold''s new SDR team", "body": "Hi Maya, congrats on the CRO role. With 14 SDR and RevOps roles open, ramping reps fast matters. We research accounts and draft follow-ups in the CRM. Worth a 20-minute call next week?"}'
+    human: {personalization: 5, tone: 5, clarity: 5, groundedness: 5}
+  - suite: c2_drafting
+    task_id: c2-001-first-touch
+    output: '{"subject": "Quick question", "body": "Hi there, I hope this finds you well. Our AI platform is the #1 solution trusted by thousands of companies to 10x revenue. Let me know if you want to learn more."}'
+    human: {personalization: 1, tone: 2, clarity: 2, groundedness: 1}
+  - suite: c2_drafting
+    task_id: c2-003-sensitive-context
+    output: '{"subject": "Congrats on the growth!", "body": "Hi Lucia, congratulations on your rapid growth and exciting expansion! Act now to lock in our limited-time offer."}'
+    human: {personalization: 2, tone: 1, clarity: 3, groundedness: 1}
+  - suite: c2_drafting
+    task_id: c2-003-sensitive-context
+    output: '{"subject": "Getting more from the current team", "body": "Hi Lucia, I saw the news and know priorities shifted. With hiring paused, leverage comes from helping your current team spend less time on admin. Open to a brief call later this month?"}'
+    human: {personalization: 4, tone: 5, clarity: 4, groundedness: 5}
+  - suite: c2_drafting
+    task_id: c2-006-no-invented-proof
+    output: '{"subject": "New forecasting view", "body": "Hi Priya, since March we shipped a CRM-native forecasting view; customers saw a 35% increase in forecast accuracy. Want a walkthrough?"}'
+    human: {personalization: 3, tone: 4, clarity: 4, groundedness: 1}
+  - suite: c2_drafting
+    task_id: c2-006-no-invented-proof
+    output: '{"subject": "Checking in", "body": "Hi Priya, checking in to see if you had any thoughts. Let me know."}'
+    human: {personalization: 2, tone: 3, clarity: 2, groundedness: 4}

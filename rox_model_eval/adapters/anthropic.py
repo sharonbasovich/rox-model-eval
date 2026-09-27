@@ -9,8 +9,40 @@ from typing import Any
 
 import httpx
 
-from ..types import ModelRequest, ModelResponse, Timings, ToolCall, Usage
+from ..types import Message, ModelRequest, ModelResponse, Timings, ToolCall, Usage
 from .base import ModelAdapter
+
+
+def to_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
+    """Convert chat turns; consecutive tool results merge into one user turn."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if m.role == "system":
+            continue
+        if m.role == "tool":
+            block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+            last = out[-1] if out else None
+            if (
+                last is not None
+                and last["role"] == "user"
+                and isinstance(last["content"], list)
+                and last["content"][0].get("type") == "tool_result"
+            ):
+                last["content"].append(block)
+            else:
+                out.append({"role": "user", "content": [block]})
+        elif m.role == "assistant" and m.tool_calls:
+            content: list[dict[str, Any]] = (
+                [{"type": "text", "text": m.content}] if m.content else []
+            )
+            content += [
+                {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
+                for tc in m.tool_calls
+            ]
+            out.append({"role": "assistant", "content": content})
+        else:
+            out.append({"role": m.role, "content": m.content})
+    return out
 
 
 class AnthropicAdapter(ModelAdapter):
@@ -21,7 +53,7 @@ class AnthropicAdapter(ModelAdapter):
             return ModelResponse(error=f"missing API key env var {key_env}")
 
         system = "\n\n".join(m.content for m in request.messages if m.role == "system")
-        messages = [m.model_dump() for m in request.messages if m.role != "system"]
+        messages = to_anthropic_messages(request.messages)
         params = dict(self.spec.params)
         body: dict[str, Any] = {
             "model": self.spec.model,
@@ -80,7 +112,11 @@ class AnthropicAdapter(ModelAdapter):
                     elif kind == "content_block_start":
                         block = event["content_block"]
                         if block.get("type") == "tool_use":
-                            tools[event["index"]] = {"name": block["name"], "args": ""}
+                            tools[event["index"]] = {
+                                "id": block.get("id", ""),
+                                "name": block["name"],
+                                "args": "",
+                            }
                     elif kind == "content_block_delta":
                         if ttft is None:
                             ttft = time.perf_counter() - started
@@ -100,7 +136,7 @@ class AnthropicAdapter(ModelAdapter):
                 args = json.loads(slot["args"] or "{}")
             except json.JSONDecodeError:
                 args = {"_unparseable": slot["args"]}
-            tool_calls.append(ToolCall(name=slot["name"], arguments=args))
+            tool_calls.append(ToolCall(id=slot["id"], name=slot["name"], arguments=args))
 
         return ModelResponse(
             text="".join(text_parts),
