@@ -61,11 +61,11 @@ injections). They are **not** measurements of any model; the scorecard says so.
 
 ```bash
 export OPENAI_API_KEY=...
-# 1. uncomment gpt-frontier / gpt-frontier-mini in config/models.yaml (check ids + prices)
-# 2. mark the model Rox runs in production today as `baseline: true`
-# 3. calibrate the judge before trusting judge-blended scores
-python -m rox_model_eval calibrate --judge gpt-frontier
-python -m rox_model_eval run --models gpt-frontier,gpt-frontier-mini --suite all --reps 3 --judge gpt-frontier
+# gpt-6-sol (baseline) and gpt-6-luna are configured in config/models.yaml; recheck prices
+# mark the model Rox runs in production today as `baseline: true`
+# calibrate the judge before trusting judge-blended scores
+python -m rox_model_eval calibrate --judge gpt-6-sol
+python -m rox_model_eval run --models gpt-6-sol,gpt-6-luna --suite all --reps 1 --judge gpt-6-sol
 ```
 
 Any OpenAI-compatible endpoint works (`adapter: openai` + `base_url`), including a Rox model gateway,
