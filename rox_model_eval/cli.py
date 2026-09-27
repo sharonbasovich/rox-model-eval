@@ -19,7 +19,7 @@ from .adapters import build_adapter
 from .aggregate import overall, recommend, routing_table, summarize
 from .config import ModelSpec, load_models, load_weights
 from .judge import calibrate, load_labels
-from .report import RunReport, write_run
+from .report import CapabilityInfo, RunReport, write_run
 from .runner import pairwise_vs_baseline, run_suite
 from .suites import ALL_SUITES, load_suite, resolve_suites, suite_hash
 from .types import Attempt
@@ -61,10 +61,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     attempts: list[Attempt] = []
     pairwise: dict[str, dict[str, float]] = {}
     hashes: dict[str, str] = {}
+    info: dict[str, CapabilityInfo] = {}
     baseline = next((s.id for s in chosen if s.baseline), None)
     for name in names:
         suite = load_suite(args.suites_dir, name)
         hashes[suite.capability] = suite_hash(args.suites_dir, name)
+        info[suite.capability] = CapabilityInfo(
+            name=suite.name, description=" ".join(suite.description.split()), tasks=len(suite.tasks)
+        )
         print(
             f"{suite.capability}: {len(suite.tasks)} tasks x {args.reps} reps "
             f"x {len(chosen)} models ",
@@ -94,6 +98,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         routing=routing_table(summaries, weights),
         regressions=regressions,
         simulated=any(specs[a.model_id].adapter == "mock" for a in attempts),
+        capability_info=info,
+        weights=weights,
     )
     label = names[0] if len(names) == 1 else f"{len(names)}suites"
     scorecard = write_run(Path(args.out) / f"{run_id}-{label}", report, attempts)
@@ -101,7 +107,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     for o in report.overall:
         print(
             f"  {o.model_id:<22} {o.verdict:<9} fitness={o.fitness:.3f} "
-            f"$/task={o.cost_per_task_usd:.5f} {'; '.join(o.reasons)}"
+            f"$/task={o.cost_per_task_usd:.5f} s/task={o.latency_per_task_s:.1f} "
+            f"{' '.join(o.reasons)}"
         )
     for g in regressions:
         print(f"  REGRESSION {g.model_id} {g.capability} {g.metric}: {g.previous} -> {g.current}")
