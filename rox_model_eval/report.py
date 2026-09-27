@@ -95,7 +95,8 @@ def render_markdown(report: RunReport, attempts: list[Attempt]) -> str:
     ]
     for r in report.routing:
         lines.append(
-            f"| {label(r.capability)} | `{r.quality_pick}` | `{r.value_pick}` | `{r.baseline}` | {r.note} |"
+            f"| {label(r.capability)} | {_pick(r.quality_pick)} | {_pick(r.value_pick)} "
+            f"| {_pick(r.baseline)} | {r.note} |"
         )
     lines += ["", "## Regressions", ""]
     if not report.regressions:
@@ -349,6 +350,10 @@ def _plan(report: RunReport, fallback: str) -> tuple[float, float, float] | None
     return (cost / wsum, fit / wsum, secs / wsum) if wsum else None
 
 
+def _pick(model_id: str | None) -> str:
+    return f"`{model_id}`" if model_id else "none"
+
+
 def bottom_line(report: RunReport) -> list[str]:
     """Plain-English summary sentences that stand on their own."""
     lines: list[str] = []
@@ -383,6 +388,12 @@ def bottom_line(report: RunReport) -> list[str]:
             lines.append(
                 "Per capability, the cheapest model that clears every gate and is close to the "
                 f"best quality is: {'; '.join(parts)}."
+            )
+        uncovered = [label(r.capability) for r in report.routing if not r.value_pick]
+        if uncovered:
+            lines.append(
+                f"No model clears every gate on {', '.join(uncovered)}; those workflows still "
+                "need human review of the output."
             )
     elif adopt:
         best = max(adopt, key=lambda o: o.fitness)
@@ -671,8 +682,8 @@ def render_html(report: RunReport, attempts: list[Attempt]) -> str:
     for r in report.routing:
         changed = bool(r.value_pick and r.baseline and r.value_pick != r.baseline)
         out.append(
-            f"<tr><td>{e(label(r.capability))}</td><td><code>{e(str(r.value_pick))}</code>"
-            f"{' ← change' if changed else ''}</td><td><code>{e(str(r.quality_pick))}</code></td>"
+            f"<tr><td>{e(label(r.capability))}</td><td>{e(r.value_pick) if r.value_pick else 'no model'}"
+            f"{' ← change' if changed else ''}</td><td>{e(r.quality_pick) if r.quality_pick else 'no model'}</td>"
             f"<td>{e(r.note)}</td></tr>"
         )
     out.append(
