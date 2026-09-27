@@ -20,30 +20,31 @@ models:
 
   # --- OpenAI GPT-6 (prices: https://developers.openai.com/api/docs/pricing, Standard tier) ---
   # Every prompt in the suites is under the 272K-token long-context surcharge threshold.
-  # `reasoning_effort: low` keeps the smoke benchmark cheap; raise it for decision runs.
+  # GPT-6 needs the Responses API for function tools with reasoning.
+  # `reasoning.effort: low` keeps the smoke benchmark cheap; raise it for decision runs.
   - id: gpt-6-sol
-    adapter: openai
+    adapter: openai_responses
     model: gpt-6-sol
     base_url: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
     price_in_per_mtok: 2.00
     price_out_per_mtok: 10.00
     price_cached_in_per_mtok: 0.20
-    params: { reasoning_effort: low }
+    params: { reasoning: { effort: low } }
     baseline: true
 
   - id: gpt-6-luna
-    adapter: openai
+    adapter: openai_responses
     model: gpt-6-luna
     base_url: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
     price_in_per_mtok: 0.10
     price_out_per_mtok: 0.50
     price_cached_in_per_mtok: 0.01
-    params: { reasoning_effort: low }
+    params: { reasoning: { effort: low } }
 
   # - id: gpt-6-astra
-  #   adapter: openai
+  #   adapter: openai_responses
   #   model: gpt-6-astra
   #   base_url: https://api.openai.com/v1
   #   api_key_env: OPENAI_API_KEY

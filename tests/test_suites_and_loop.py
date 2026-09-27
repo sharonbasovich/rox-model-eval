@@ -6,6 +6,12 @@ import pytest
 from rox_model_eval.adapters.anthropic import to_anthropic_messages
 from rox_model_eval.adapters.base import ModelAdapter
 from rox_model_eval.adapters.openai_compatible import to_openai_message
+from rox_model_eval.adapters.openai_responses import (
+    parse_output,
+    parse_usage,
+    to_responses_input,
+    to_responses_tool,
+)
 from rox_model_eval.config import ModelSpec
 from rox_model_eval.runner import execute, run_suite
 from rox_model_eval.suites import ALL_SUITES, build_transcript, load_suite
@@ -105,3 +111,35 @@ def test_provider_message_serialization() -> None:
     assert [m["role"] for m in an] == ["user", "assistant", "user"]
     assert an[1]["content"][0]["type"] == "tool_use"
     assert [b["tool_use_id"] for b in an[2]["content"]] == ["c1", "c2"]
+
+
+def test_responses_api_serialization() -> None:
+    call = ToolCall(id="c1", name="search", arguments={"q": "x"})
+    items = to_responses_input(
+        [
+            Message(role="user", content="hi"),
+            Message(role="assistant", content="", tool_calls=[call]),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+        ]
+    )
+    assert items[1] == {
+        "type": "function_call",
+        "call_id": "c1",
+        "name": "search",
+        "arguments": '{"q": "x"}',
+    }
+    assert items[2] == {"type": "function_call_output", "call_id": "c1", "output": "r1"}
+    tool = to_responses_tool({"type": "function", "function": {"name": "search", "parameters": {}}})
+    assert tool == {"type": "function", "name": "search", "parameters": {}}
+    text, calls = parse_output(
+        [
+            {"type": "reasoning", "summary": []},
+            {"type": "message", "content": [{"type": "output_text", "text": "done"}]},
+            {"type": "function_call", "call_id": "c2", "name": "get", "arguments": '{"id": 1}'},
+        ]
+    )
+    assert text == "done" and calls[0].arguments == {"id": 1}
+    usage = parse_usage(
+        {"input_tokens": 10, "output_tokens": 5, "input_tokens_details": {"cached_tokens": 4}}
+    )
+    assert (usage.prompt_tokens, usage.completion_tokens, usage.cached_prompt_tokens) == (10, 5, 4)
