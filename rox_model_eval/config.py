@@ -44,7 +44,7 @@ class ModelSpec(BaseModel):
 
 
 class Weights(BaseModel):
-    """Capability weights: should mirror Rox's real traffic mix."""
+    """Capability weights for the composite score, plus gate thresholds."""
 
     capabilities: dict[str, float] = Field(default_factory=dict)
     quality_gate: float = 0.75

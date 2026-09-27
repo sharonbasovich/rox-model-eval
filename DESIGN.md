@@ -2,6 +2,12 @@
 
 **Author:** Sharon Basovich · **Status:** Design (v1) · **Audience:** Gopal (Head of Applied AI) + applied-AI team
 
+> **Assumptions and provenance (read first).** This design was written without access to Rox's
+> code, prompts, data, traffic or model choices. The capability list is inferred from endpoint
+> names observed in an external security scan (`rox-scan`); the tasks are synthetic; the weights,
+> gates and any "current model" are placeholders. Statements below about what Rox uses or needs
+> are hypotheses to confirm with the Rox team, not facts.
+
 ---
 
 ## 0. TL;DR

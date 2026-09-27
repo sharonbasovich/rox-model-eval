@@ -135,10 +135,21 @@ def render_markdown(report: RunReport, attempts: list[Attempt]) -> str:
     return "\n".join(lines)
 
 
-_VERDICT_COLOR = {"ADOPT": "#15803d", "ROUTE": "#b45309", "HOLD": "#b91c1c", "BASELINE": "#1d4ed8"}
+_VERDICT_COLOR = {
+    "ADOPT": "#15803d",
+    "ROUTE": "#b45309",
+    "HOLD": "#b91c1c",
+    "BASELINE": "#1d4ed8",
+    "PASS": "#15803d",
+    "PARTIAL": "#b45309",
+}
 
 VERDICT_MEANING = {
-    "BASELINE": "The model Rox uses today. Everything else is compared against it.",
+    "PASS": "Clears every quality, fabrication, format and safety gate (overall: on every "
+    "capability). Used when no baseline model is configured.",
+    "PARTIAL": "Clears every gate on some capabilities but fails at least one gate elsewhere.",
+    "BASELINE": "The model marked `baseline: true` in the config as the one currently in use. "
+    "ADOPT and ROUTE are relative to it.",
     "ADOPT": "Good enough to replace the baseline as the default: same or better quality, "
     "same or lower cost, and it passes every gate.",
     "ROUTE": "Passes every gate on some capabilities but is not a full replacement. Send it "
@@ -150,8 +161,8 @@ VERDICT_MEANING = {
 METRIC_MEANING = [
     (
         "Rox Fitness",
-        "Overall quality from 0 to 1: the average task score across capabilities, "
-        "weighted by how much Rox traffic each capability represents (weights below).",
+        "Overall quality from 0 to 1: the average task score across the capabilities "
+        "tested, using the capability weights below.",
     ),
     (
         "Score",
@@ -317,69 +328,94 @@ def _pct_change(new: float, old: float) -> str:
     return f"{abs(d):.0%} {'lower' if d < 0 else 'higher'}"
 
 
+def _plan(report: RunReport, fallback: str) -> tuple[float, float, float] | None:
+    """Weighted ($/task, fitness, s/task) if each capability uses its routing pick."""
+    weights = report.weights.capabilities if report.weights else {}
+    cell = {(s.model_id, s.capability): s for s in report.capabilities}
+    cost = fit = secs = wsum = 0.0
+    for r in report.routing:
+        pick = cell.get((r.value_pick or fallback, r.capability))
+        if pick is None:
+            continue
+        w = weights.get(r.capability, 0.0) or 0.01
+        wsum += w
+        cost += w * pick.cost_per_task_usd
+        fit += w * pick.mean_score
+        secs += w * pick.mean_latency_s
+    return (cost / wsum, fit / wsum, secs / wsum) if wsum else None
+
+
 def bottom_line(report: RunReport) -> list[str]:
     """Plain-English summary sentences that stand on their own."""
     lines: list[str] = []
+    if not report.overall:
+        return lines
     base = next((o for o in report.overall if o.baseline), None)
-    weights = report.weights.capabilities if report.weights else {}
-    cell = {(s.model_id, s.capability): s for s in report.capabilities}
+    top = max(report.overall, key=lambda o: o.fitness)
+    ref = base or top
     candidates = [o for o in report.overall if not o.baseline]
     adopt = [o for o in candidates if o.verdict == "ADOPT"]
+    routed: dict[str, list[str]] = {}
+    for r in report.routing:
+        if r.value_pick:
+            routed.setdefault(r.value_pick, []).append(r.capability)
 
     if base is None:
-        best = max(report.overall, key=lambda o: o.fitness, default=None)
-        if best:
+        lines.append(
+            f"Highest quality: {top.model_id} (Rox Fitness {top.fitness:.3f}, "
+            f"{_money(top.cost_per_task_usd)} and {top.latency_per_task_s:.1f}s per task)."
+        )
+        for o in report.overall:
+            if o is top:
+                continue
+            cost = o.cost_per_task_usd / top.cost_per_task_usd if top.cost_per_task_usd else 1
+            secs = o.latency_per_task_s / top.latency_per_task_s if top.latency_per_task_s else 1
             lines.append(
-                f"No baseline was set; {best.model_id} scored highest "
-                f"(Rox Fitness {best.fitness:.3f})."
+                f"{o.model_id}: Rox Fitness {o.fitness:.3f} ({o.fitness / top.fitness:.1%} of "
+                f"{top.model_id}'s) at {cost:.0%} of the cost and {secs:.0%} of the time per task."
+            )
+        if len(routed) > 1:
+            parts = [f"{m} for {', '.join(label(c) for c in cs)}" for m, cs in routed.items()]
+            lines.append(
+                "Per capability, the cheapest model that clears every gate and is close to the "
+                f"best quality is: {'; '.join(parts)}."
             )
     elif adopt:
-        top = max(adopt, key=lambda o: o.fitness)
+        best = max(adopt, key=lambda o: o.fitness)
         lines.append(
-            f"Recommendation: switch the default from {base.model_id} to {top.model_id}. "
-            f"It matches or beats the baseline's quality (Rox Fitness {top.fitness:.3f} vs "
-            f"{base.fitness:.3f}) at {_pct_change(top.cost_per_task_usd, base.cost_per_task_usd)} "
-            "cost per task, and passes every quality and safety gate."
+            f"Recommendation: switch from {base.model_id} to {best.model_id}. It matches or "
+            f"beats the baseline's quality (Rox Fitness {best.fitness:.3f} vs {base.fitness:.3f}) "
+            f"at {_pct_change(best.cost_per_task_usd, base.cost_per_task_usd)} cost per task, "
+            "and passes every quality and safety gate."
         )
     else:
-        routed: dict[str, list[str]] = {}
-        for r in report.routing:
-            if r.value_pick and r.value_pick != base.model_id:
-                routed.setdefault(r.value_pick, []).append(r.capability)
-        if routed:
-            parts = [f"send {', '.join(label(c) for c in cs)} to {m}" for m, cs in routed.items()]
-            n = sum(len(cs) for cs in routed.values())
+        moved = {m: cs for m, cs in routed.items() if m != base.model_id}
+        if moved:
+            parts = [f"send {', '.join(label(c) for c in cs)} to {m}" for m, cs in moved.items()]
+            n = sum(len(cs) for cs in moved.values())
             lines.append(
                 f"Recommendation: keep {base.model_id} as the default, and {'; '.join(parts)} "
                 f"({n} of {len(report.routing)} capabilities)."
             )
-            plan_cost = plan_fit = plan_time = wsum = 0.0
-            for r in report.routing:
-                pick = cell.get((r.value_pick or base.model_id, r.capability))
-                if pick is None:
-                    continue
-                w = weights.get(r.capability, 0.0) or 0.01
-                wsum += w
-                plan_cost += w * pick.cost_per_task_usd
-                plan_fit += w * pick.mean_score
-                plan_time += w * pick.mean_latency_s
-            if wsum:
-                plan_cost, plan_fit, plan_time = plan_cost / wsum, plan_fit / wsum, plan_time / wsum
-                lines.append(
-                    f"On this benchmark that split costs {_money(plan_cost)} per task vs "
-                    f"{_money(base.cost_per_task_usd)} for {base.model_id} alone "
-                    f"({_pct_change(plan_cost, base.cost_per_task_usd)}), with Rox Fitness "
-                    f"{plan_fit:.3f} vs {base.fitness:.3f} and {plan_time:.1f}s vs "
-                    f"{base.latency_per_task_s:.1f}s average time per task."
-                )
         else:
             lines.append(
                 f"Recommendation: keep {base.model_id}. No candidate earns traffic on any "
                 "capability yet."
             )
 
-    for o in candidates:
-        lines.append(f"{o.model_id} ({o.verdict}): {' '.join(o.reasons)}")
+    plan = _plan(report, ref.model_id)
+    if plan and len(routed) > 1:
+        cost, fit, secs = plan
+        who = f"{ref.model_id} {'alone' if base else 'for everything'}"
+        lines.append(
+            f"On this benchmark that split costs {_money(cost)} per task vs "
+            f"{_money(ref.cost_per_task_usd)} for {who} "
+            f"({_pct_change(cost, ref.cost_per_task_usd)}), with Rox Fitness {fit:.3f} vs "
+            f"{ref.fitness:.3f} and {secs:.1f}s vs {ref.latency_per_task_s:.1f}s per task."
+        )
+    if base is not None:
+        for o in candidates:
+            lines.append(f"{o.model_id} ({o.verdict}): {' '.join(o.reasons)}")
 
     unsafe = sorted(
         {(s.model_id, label(s.capability)) for s in report.capabilities if s.safety_violation_rate}
@@ -395,10 +431,16 @@ def bottom_line(report: RunReport) -> list[str]:
             "Safety: no model obeyed a prompt injection, leaked confidential notes or took an "
             "unrequested action."
         )
+    if report.judge and report.judge in {o.model_id for o in report.overall}:
+        lines.append(
+            f"Judge bias: the AI judge ({report.judge}) is also one of the models tested, so the "
+            "judge-scored part of writing tasks may favour it."
+        )
     if report.reps < 3:
         lines.append(
-            f"Confidence: each task ran {report.reps} time{'s' if report.reps != 1 else ''}. Treat differences smaller than "
-            "about 0.02 in fitness as noise until a 3-repetition run confirms them."
+            f"Confidence: each task ran {report.reps} time{'s' if report.reps != 1 else ''}. "
+            "Treat differences smaller than about 0.02 in fitness as noise until a "
+            "3-repetition run confirms them."
         )
     return lines
 
@@ -443,8 +485,10 @@ def _glossary(report: RunReport) -> str:
         "<h2>How to read this scorecard</h2><div class='card'><div class='grid'>",
         "<div style='flex:1 1 420px'><h3>Verdicts</h3><dl>",
     ]
+    used = {o.verdict for o in report.overall} | {s.verdict for s in report.capabilities}
     for v, meaning in VERDICT_MEANING.items():
-        out.append(f"<dt>{_badge(v)}</dt><dd>{e(meaning)}</dd>")
+        if v in used:
+            out.append(f"<dt>{_badge(v)}</dt><dd>{e(meaning)}</dd>")
     out.append("</dl>")
     w = report.weights
     if w is not None:
@@ -463,13 +507,19 @@ def _glossary(report: RunReport) -> str:
     out.append("</dl></div></div>")
     if w is not None:
         out.append(
-            "<h3 style='margin-top:14px'>Capabilities and traffic weights</h3><table><tr>"
-            "<th>Capability</th><th>Weight</th><th>What it tests</th></tr>"
+            "<h3 style='margin-top:14px'>Capabilities and weights</h3>"
+            + (
+                "<p class='lede'>Weights are equal because no real usage mix is known. Set them "
+                "in <code>config/weights.yaml</code> to reflect actual traffic.</p>"
+                if len({w.capabilities.get(c, 0) for c in report.suites}) == 1
+                else ""
+            )
+            + "<table><tr><th>Capability</th><th>Weight</th><th>What it tests</th></tr>"
         )
         for cap in sorted(report.suites):
             info = report.capability_info.get(cap)
             out.append(
-                f"<tr><td>{e(label(cap))}</td><td>{w.capabilities.get(cap, 0):.0%}</td>"
+                f"<tr><td>{e(label(cap))}</td><td>{w.capabilities.get(cap, 0):.1%}</td>"
                 f"<td>{e(info.description if info else '')}</td></tr>"
             )
         out.append("</table>")
@@ -492,19 +542,22 @@ def render_html(report: RunReport, attempts: list[Attempt]) -> str:
     cell = {(s.model_id, s.capability): s for s in report.capabilities}
     n_tasks = sum(i.tasks for i in report.capability_info.values())
     scope = (
-        f"{len(models)} models · {n_tasks or '?'} Rox tasks across {len(report.suites)} "
-        f"capabilities · {report.reps} repetition(s) per task · "
+        f"{len(models)} models · {n_tasks or '?'} synthetic tasks across {len(report.suites)} "
+        f"capabilities · {report.reps} repetition{'s' if report.reps != 1 else ''} per task · "
         f"AI judge: {report.judge or 'none'}"
     )
     out = [
         f"<!doctype html><html><head><meta charset='utf-8'><title>Rox Model Eval {e(report.run_id)}"
         f"</title><style>{_CSS}</style></head><body><main>",
-        "<h1>Which model should Rox run?</h1>",
-        "<div class='lede'>Every new frontier model is run through the same synthetic but "
-        "realistic Rox workloads (account research, email drafting, CRM Q&amp;A, agent tool "
-        "use, extraction, long call transcripts and prompt-injection attacks), scored "
-        "automatically, and compared with the model Rox runs today on quality, cost, speed "
-        "and safety.</div>",
+        "<h1>How the models compare on sales-assistant tasks</h1>",
+        "<div class='lede'>Each model runs the same set of synthetic test tasks covering "
+        "sales-assistant work: account research, email drafting, CRM Q&amp;A, agent tool use, "
+        "record extraction, long call transcripts and prompt-injection attacks. Answers are "
+        "scored automatically and compared on quality, cost, speed and safety.</div>"
+        "<div class='warn'>Scope: the tasks, capability list and weights were written for this "
+        "harness. They are not drawn from Rox's prompts, data, traffic or current model "
+        "choices, so results show how models compare on these tasks, not how they would "
+        "perform inside Rox.</div>",
         f"<div class='sub'>{e(scope)} · run <code>{e(report.run_id)}</code></div>",
     ]
     if report.simulated:
@@ -535,14 +588,14 @@ def render_html(report: RunReport, attempts: list[Attempt]) -> str:
 
     out.append(
         "<h2>Where each model is good enough</h2><p class='lede'>Quality score per capability "
-        "(green = high) with that capability's verdict. Weight = share of Rox traffic.</p>"
+        "(green = high) with that capability's verdict. Weight = its weight in Rox Fitness.</p>"
         "<div class='card'><table><tr><th>Capability</th><th>Weight</th>"
     )
     wts = report.weights.capabilities if report.weights else {}
     out += [f"<th><code>{e(m)}</code></th>" for m in models]
     out.append("</tr>")
     for cap in caps:
-        out.append(f"<tr><td>{e(label(cap))}</td><td>{wts.get(cap, 0):.0%}</td>")
+        out.append(f"<tr><td>{e(label(cap))}</td><td>{wts.get(cap, 0):.1%}</td>")
         for m in models:
             s = cell.get((m, cap))
             if s is None:
@@ -564,7 +617,7 @@ def render_html(report: RunReport, attempts: list[Attempt]) -> str:
         "<th>Why</th></tr>"
     )
     for r in report.routing:
-        changed = r.value_pick and r.baseline and r.value_pick != r.baseline
+        changed = bool(r.value_pick and r.baseline and r.value_pick != r.baseline)
         out.append(
             f"<tr><td>{e(label(r.capability))}</td><td><code>{e(str(r.value_pick))}</code>"
             f"{' ← change' if changed else ''}</td><td><code>{e(str(r.quality_pick))}</code></td>"

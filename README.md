@@ -1,8 +1,16 @@
 # rox-model-eval
 
-Scores frontier models on **Rox's own jobs** — not public leaderboards — and emits an
-**ADOPT / ROUTE / HOLD** decision per capability and overall. Built for the question that comes up
-at every model release: *should Rox switch to, route some traffic to, or ignore this model?*
+Scores frontier models on synthetic sales-assistant tasks (research, drafting, CRM Q&A, tool
+use, extraction, long transcripts, prompt-injection safety) instead of public leaderboards, and
+compares them on quality, cost, speed and safety.
+
+**Scope and assumptions.** The capability list was inferred from endpoint names seen in an
+external security scan; the tasks, weights and gates were written for this harness. None of it is
+drawn from Rox's prompts, data, traffic or current model choices, so results show how models
+compare on these tasks, not how they would perform inside Rox. Capability weights are equal by
+default, and no baseline model is set: models are compared head-to-head (PASS / PARTIAL / HOLD).
+If a model is marked `baseline: true` (the one actually in use), verdicts become ADOPT / ROUTE /
+HOLD relative to it.
 
 Full design and rationale: [`DESIGN.md`](DESIGN.md).
 
@@ -61,15 +69,15 @@ injections). They are **not** measurements of any model; the scorecard says so.
 
 ```bash
 export OPENAI_API_KEY=...
-# gpt-6-sol (baseline) and gpt-6-luna are configured in config/models.yaml; recheck prices
-# mark the model Rox runs in production today as `baseline: true`
+# gpt-6-sol and gpt-6-luna are configured in config/models.yaml; recheck prices
+# optionally mark the model actually in use as `baseline: true`
 # calibrate the judge before trusting judge-blended scores
 python -m rox_model_eval calibrate --judge gpt-6-sol
 python -m rox_model_eval run --models gpt-6-sol,gpt-6-luna --suite all --reps 1 --judge gpt-6-sol
 ```
 
-Any OpenAI-compatible endpoint works (`adapter: openai` + `base_url`), including a Rox model gateway,
-which measures models exactly as Rox calls them. Anthropic uses `adapter: anthropic`.
+Any OpenAI-compatible endpoint works (`adapter: openai` + `base_url`), including an internal model
+gateway if one exists and access is granted. Anthropic uses `adapter: anthropic`.
 
 A judge from the same family as a candidate can favour it; for decisions prefer a judge from a
 different provider, or rely on the deterministic columns.
@@ -77,14 +85,14 @@ different provider, or rely on the deterministic columns.
 ## Evaluating a newly released model
 
 1. Add an entry to `config/models.yaml` (`adapter`, `model`, `api_key_env`, current prices).
-2. Run it alongside the baseline: `--models <baseline-id>,<new-id> --suite all`.
+2. Run it alongside the models to compare: `--models <id-a>,<new-id> --suite all`.
 3. Read the overall verdict, routing table and "worst failures" receipts in `scorecard.html`.
 
 ## Adding tasks or suites
 
 - Add tasks to an existing `suites/<name>/suite.yaml`; `pytest` checks that every task's
   `reference_output` passes its own scorer, so broken labels fail CI.
-- Replace `calibration/labels.yaml` with labels from Rox reviewers before relying on the judge.
+- Replace `calibration/labels.yaml` with labels from real human reviewers before relying on the judge.
 
 ## Development
 

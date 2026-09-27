@@ -90,3 +90,27 @@ def test_charts_plot_each_model_with_its_values() -> None:
     cost, time = cost_svg(models), time_svg(models)
     assert "big" in cost and "small" in cost and "$0.0001" in cost
     assert "2.9s" in time and "2.1s" in time and "polyline" in time
+
+
+def test_without_baseline_compares_head_to_head() -> None:
+    specs = {k: v.model_copy(update={"baseline": False}) for k, v in SPECS.items()}
+    suite = load_suite(ROOT / "suites", "c6_extraction")
+    attempts = run_suite([specs["mock-strong"], specs["mock-cheap"]], suite, 1)
+    s = recommend(summarize(attempts, specs), WEIGHTS)
+    assert {x.verdict for x in s} <= {"PASS", "HOLD"}
+    ov = overall(s, specs, WEIGHTS)
+    assert {o.verdict for o in ov} <= {"PASS", "PARTIAL", "HOLD"}
+    report = RunReport(
+        run_id="t",
+        suites={"c6_extraction": "h"},
+        reps=1,
+        overall=ov,
+        capabilities=s,
+        routing=routing_table(s, WEIGHTS),
+        weights=WEIGHTS,
+    )
+    lines = bottom_line(report)
+    assert lines[0].startswith("Highest quality:")
+    assert not any("baseline" in line.lower() for line in lines)
+    page = render_html(report, attempts)
+    assert "BASELINE" not in page and "Rox uses today" not in page

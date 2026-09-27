@@ -161,6 +161,23 @@ def _gate_failures(s: ModelSummary, w: Weights) -> list[str]:
     return out
 
 
+def _versus_best(s: ModelSummary, rows: list[ModelSummary]) -> str:
+    """Head-to-head sentence for a gate-passing model when no baseline is set."""
+    best = max(rows, key=lambda r: r.mean_score)
+    if best is s or best.mean_score <= s.mean_score:
+        return f"Clears every gate with the top quality score here ({s.mean_score:.2f})."
+    cost = ""
+    if s.cost_per_success_usd and best.cost_per_success_usd:
+        cost = (
+            f", {_cheaper_phrase(s.cost_per_success_usd / best.cost_per_success_usd)} "
+            "per successful task"
+        )
+    return (
+        f"Clears every gate; quality {s.mean_score:.2f} vs {best.mean_score:.2f} for the top "
+        f"scorer ({best.model_id}){cost}."
+    )
+
+
 def recommend(summaries: list[ModelSummary], weights: Weights) -> list[ModelSummary]:
     """Gate on quality, fabrication, format and safety, then compare with the baseline.
 
@@ -186,7 +203,7 @@ def recommend(summaries: list[ModelSummary], weights: Weights) -> list[ModelSumm
             if s.baseline:
                 s.verdict = "BASELINE"
                 s.reasons = [
-                    "Current production default; the other models are measured against it.",
+                    "Marked as the baseline in config; the other models are measured against it.",
                     *(f"Fails a gate: {r}." for r in failures),
                 ]
                 continue
@@ -195,7 +212,7 @@ def recommend(summaries: list[ModelSummary], weights: Weights) -> list[ModelSumm
                 s.reasons = [f"Fails a gate: {r}." for r in failures]
                 continue
             if base is None:
-                s.verdict, s.reasons = "ADOPT", ["Clears every gate (no baseline to compare with)."]
+                s.verdict, s.reasons = "PASS", [_versus_best(s, rows)]
                 continue
             gap = s.mean_score - base.mean_score
             vs = f"quality {s.mean_score:.2f} vs baseline {base.mean_score:.2f}"
@@ -255,6 +272,7 @@ def overall(
         )
 
     base = next((r for r in results if r.baseline), None)
+    top = max(results, key=lambda r: r.fitness, default=None)
     for o in results:
         rows = by_model[o.model_id]
         unsafe = [
@@ -262,7 +280,9 @@ def overall(
         ]
         if o.baseline:
             o.verdict = "BASELINE"
-            o.reasons = ["Current production default; the other models are measured against it."]
+            o.reasons = [
+                "Marked as the baseline in config; the other models are measured against it."
+            ]
             if unsafe:
                 o.reasons.append(f"It fails the safety gate on {', '.join(unsafe)}.")
             continue
@@ -275,6 +295,29 @@ def overall(
             ]
             continue
         verdicts = o.capability_verdicts
+        if base is None and top is not None:
+            passed = [c for c, v in verdicts.items() if v == "PASS"]
+            failed = sorted(label(c) for c, v in verdicts.items() if v != "PASS")
+            o.verdict = "PASS" if not failed else ("PARTIAL" if passed else "HOLD")
+            gate = (
+                f"Clears every gate on all {len(verdicts)} capabilities."
+                if not failed
+                else f"Fails a gate on {', '.join(failed)}."
+            )
+            if o is top:
+                o.reasons = [gate, f"Highest Rox Fitness in this run ({o.fitness:.3f})."]
+            else:
+                cost = o.cost_per_task_usd / top.cost_per_task_usd if top.cost_per_task_usd else 1
+                speed = (
+                    o.latency_per_task_s / top.latency_per_task_s if top.latency_per_task_s else 1
+                )
+                faster = f"{1 - speed:.0%} faster" if speed <= 1 else f"{speed - 1:.0%} slower"
+                o.reasons = [
+                    gate,
+                    f"Rox Fitness {o.fitness:.3f} vs {top.fitness:.3f} for {top.model_id}, "
+                    f"{_cheaper_phrase(cost)} and {faster} per task.",
+                ]
+            continue
         wins = sorted(c for c, v in verdicts.items() if v in {"ADOPT", "ROUTE"})
         holds = sorted(c for c, v in verdicts.items() if v == "HOLD")
         heavy_holds = [c for c in holds if weights.capabilities.get(c, 0.0) >= 0.15]

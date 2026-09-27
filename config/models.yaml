@@ -1,5 +1,6 @@
 # Candidate models. Prices are $ per 1M tokens; update when providers change them.
-# `baseline: true` marks the current production default (regression comparison point).
+# `baseline: true` marks the model you currently use, if you know it. Verdicts are then
+# relative to it. Without one, models are compared head-to-head (PASS / PARTIAL / HOLD).
 # The first baseline among the models selected for a run is used.
 models:
   # --- offline reference implementations: run the whole harness with zero API keys ---
@@ -31,7 +32,6 @@ models:
     price_out_per_mtok: 10.00
     price_cached_in_per_mtok: 0.20
     params: { reasoning: { effort: low } }
-    baseline: true
 
   - id: gpt-6-luna
     adapter: openai_responses

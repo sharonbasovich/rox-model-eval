@@ -1,7 +1,7 @@
 """Deterministic scorer for structured extraction (C6).
 
-Rox ingests messy text (pasted signatures, CSV rows, forwarded emails) into
-strict records. What matters in production:
+Messy text (pasted signatures, CSV rows, forwarded emails) mapped into strict
+records. What is checked:
   * JSON validity and schema validity -- a malformed record breaks the pipeline.
   * Field accuracy against a labelled reference.
   * Fabrication -- a non-null value where the source text supports none. A
