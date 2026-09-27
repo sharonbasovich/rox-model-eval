@@ -2,11 +2,11 @@
 
 **Author:** Sharon Basovich · **Status:** Design (v1) · **Audience:** Gopal (Head of Applied AI) + applied-AI team
 
-> **Assumptions and provenance (read first).** This design was written without access to Rox's
-> code, prompts, data, traffic or model choices. The capability list is inferred from endpoint
-> names observed in an external security scan (`rox-scan`); the tasks are synthetic; the weights,
-> gates and any "current model" are placeholders. Statements below about what Rox uses or needs
-> are hypotheses to confirm with the Rox team, not facts.
+> **Where this comes from (read first).** The capability list is grounded in Rox's product
+> surfaces as observed while exploring Rox's web app (the `rox-scan` pass): chat agent,
+> `insights_v2`, enrichment, deals, campaigns, CSV upload. The task data is synthetic. Rox's
+> internal prompts, traffic mix and production model choices were not visible, so capability
+> weights are equal and no baseline model is assumed; those are to confirm with the Rox team.
 
 ---
 

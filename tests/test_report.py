@@ -8,6 +8,7 @@ from rox_model_eval.report import (
     bottom_line,
     cost_svg,
     render_html,
+    reuse_lines,
     time_svg,
 )
 from rox_model_eval.runner import run_suite
@@ -63,7 +64,11 @@ def test_html_has_both_charts_and_glossary_and_no_external_assets() -> None:
     page = render_html(report, attempts)
     assert "Rox Fitness vs cost per task" in page and "Rox Fitness vs time per task" in page
     assert page.count("<svg") == 2
-    assert "How to read this scorecard" in page and "Bottom line" in page
+    assert (
+        "How to read this scorecard" in page
+        and "<h3>Summary</h3>" in page
+        and "Reusing this on the next model release" in page
+    )
     assert "Record extraction" in page
     assert "http://" not in page.replace("http://www.w3.org/2000/svg", "")
     assert "https://" not in page and "<script" not in page
@@ -114,3 +119,11 @@ def test_without_baseline_compares_head_to_head() -> None:
     assert not any("baseline" in line.lower() for line in lines)
     page = render_html(report, attempts)
     assert "BASELINE" not in page and "Rox uses today" not in page
+
+
+def test_reuse_section_uses_measured_cost_and_names_models() -> None:
+    report, _ = _report()
+    lines = reuse_lines(report)
+    assert any("config/models.yaml" in line for line in lines)
+    assert any("--models <new-model>,mock-strong,mock-cheap" in line for line in lines)
+    assert any(line.startswith("Cost and time:") for line in lines)

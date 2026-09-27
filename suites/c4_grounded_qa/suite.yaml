@@ -1,7 +1,7 @@
 capability: c4_grounded_qa
 name: Grounded CRM question answering
 description: >
-  Answer a sales rep's question strictly from retrieved CRM records and cite
+  Modeled on Rox's chat agent: answer a sales rep's question strictly from retrieved CRM records and cite
   record ids. A third of the questions cannot be answered from the records; the correct
   behaviour is to say so. A confident answer there is scored as fabrication.
 scorer: grounded_qa

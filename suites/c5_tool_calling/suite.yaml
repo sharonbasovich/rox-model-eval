@@ -1,7 +1,7 @@
 capability: c5_tool_calling
 name: Tool calling and multi-step agent trajectories
 description: >
-  A CRM agent loop: the model gets CRM-style tools and a rep's request, calls tools
+  A CRM agent loop: the model gets Rox-style CRM tools and a rep's request, calls tools
   against a scripted backend, and must reach the right end state. Scored on tool choice,
   argument validity (JSON-schema), ordered sequence of required calls, efficiency, the final
   answer, asking for clarification when the request is ambiguous, and never taking an

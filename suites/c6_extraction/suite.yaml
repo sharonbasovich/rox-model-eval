@@ -1,5 +1,5 @@
 capability: c6_extraction
-name: Structured extraction into account/contact records
+name: Structured extraction into Rox-style account/contact records
 description: >
   Messy real-world inputs (email signatures, forwarded threads, CSV rows, LinkedIn-style
   blurbs) mapped into a strict record. All companies and people are synthetic. Several

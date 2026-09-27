@@ -65,9 +65,13 @@ def render_markdown(report: RunReport, attempts: list[Attempt]) -> str:
     lines += [
         f"Suites: {', '.join(report.suites)} · reps: {report.reps} · judge: {report.judge or 'none'}",
         "",
-        "## Bottom line",
+        "## Summary",
         "",
         *(f"- {line}" for line in bottom_line(report)),
+        "",
+        "### Reusing this on the next model release",
+        "",
+        *(f"- {line}" for line in reuse_lines(report)),
         "",
         "## Overall",
         "",
@@ -445,6 +449,48 @@ def bottom_line(report: RunReport) -> list[str]:
     return lines
 
 
+def reuse_lines(report: RunReport) -> list[str]:
+    """How to rerun this benchmark on the next model release, with this run's measured cost."""
+    ids = [o.model_id for o in report.overall]
+    n_tasks = sum(i.tasks for i in report.capability_info.values())
+    per_model: dict[str, tuple[float, float]] = {}
+    for s in report.capabilities:
+        cost, secs = per_model.get(s.model_id, (0.0, 0.0))
+        per_model[s.model_id] = (
+            cost + s.cost_per_task_usd * s.attempts,
+            secs + s.mean_latency_s * s.attempts,
+        )
+    lines = [
+        "Add the new model to config/models.yaml: one entry with provider, model name and "
+        "per-token prices. OpenAI (Chat Completions or Responses), Anthropic and any "
+        "OpenAI-compatible endpoint work without code changes.",
+        f"Run one command: python -m rox_model_eval run --models <new-model>,{','.join(ids)} "
+        "--suite all --reps 3. The same tasks, scorers and gates run unchanged, so results are "
+        "directly comparable with earlier releases.",
+    ]
+    if per_model:
+        costs = [c for c, _ in per_model.values()]
+        mins = [t / 60 for _, t in per_model.values()]
+        tasks = f"all {n_tasks} tasks" if n_tasks else "every task"
+
+        def span(lo: str, hi: str) -> str:
+            return lo if lo == hi else f"{lo}-{hi}"
+
+        lines.append(
+            f"Cost and time: one pass over {tasks} cost "
+            f"{span(f'${min(costs):.2f}', f'${max(costs):.2f}')} per model in this run and took "
+            f"about {span(f'{min(mins):.0f}', f'{max(mins):.0f}')} minutes of model time per "
+            "model. A 3-repetition run costs about three times that, scaled by the new model's "
+            "per-token prices."
+        )
+    lines.append(
+        "Every run is saved to run history. The next scorecard flags any capability where a "
+        "model scored lower than on its previous run of identical tasks, which also catches "
+        "silent provider-side model updates."
+    )
+    return lines
+
+
 _CSS = """
 body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f1f5f9;color:#0f172a;
 line-height:1.45}
@@ -542,29 +588,34 @@ def render_html(report: RunReport, attempts: list[Attempt]) -> str:
     cell = {(s.model_id, s.capability): s for s in report.capabilities}
     n_tasks = sum(i.tasks for i in report.capability_info.values())
     scope = (
-        f"{len(models)} models · {n_tasks or '?'} synthetic tasks across {len(report.suites)} "
+        f"{len(models)} models · {n_tasks or '?'} Rox-style tasks (synthetic data) across {len(report.suites)} "
         f"capabilities · {report.reps} repetition{'s' if report.reps != 1 else ''} per task · "
         f"AI judge: {report.judge or 'none'}"
     )
     out = [
         f"<!doctype html><html><head><meta charset='utf-8'><title>Rox Model Eval {e(report.run_id)}"
         f"</title><style>{_CSS}</style></head><body><main>",
-        "<h1>How the models compare on sales-assistant tasks</h1>",
-        "<div class='lede'>Each model runs the same set of synthetic test tasks covering "
-        "sales-assistant work: account research, email drafting, CRM Q&amp;A, agent tool use, "
-        "record extraction, long call transcripts and prompt-injection attacks. Answers are "
-        "scored automatically and compared on quality, cost, speed and safety.</div>"
-        "<div class='warn'>Scope: the tasks, capability list and weights were written for this "
-        "harness. They are not drawn from Rox's prompts, data, traffic or current model "
-        "choices, so results show how models compare on these tasks, not how they would "
-        "perform inside Rox.</div>",
+        "<h1>How frontier models handle Rox workflows</h1>",
+        "<div class='lede'>Each model runs the same test tasks, modeled on Rox's product "
+        "workflows: account research, email drafting, deal and lead prioritisation, CRM "
+        "Q&amp;A, agent tool use, record extraction, long call transcripts and prompt-injection "
+        "attacks. Answers are scored automatically and compared on quality, cost, speed and "
+        "safety.</div>"
+        "<div class='warn'>Where the tasks come from: each capability mirrors a Rox product "
+        "surface observed while exploring Rox's web app (chat agent, insights, company and "
+        "people enrichment, deals, campaigns, CSV upload). The task data is synthetic, and "
+        "capability weights are equal because Rox's real usage mix isn't known. Results show "
+        "how models handle Rox-style workflows; they are not measurements of Rox's production "
+        "system.</div>",
         f"<div class='sub'>{e(scope)} · run <code>{e(report.run_id)}</code></div>",
     ]
     if report.simulated:
         out.append(f"<div class='warn'>{e(_SIM_NOTE)}</div>")
 
-    out.append("<div class='card bottom'><h3>Bottom line</h3><ul>")
+    out.append("<div class='card bottom'><h3>Summary</h3><ul>")
     out += [f"<li>{e(line)}</li>" for line in bottom_line(report)]
+    out.append("</ul><h3>Reusing this on the next model release</h3><ul>")
+    out += [f"<li>{e(line)}</li>" for line in reuse_lines(report)]
     out.append("</ul></div><div class='tiles'>")
     for o in report.overall:
         out.append(

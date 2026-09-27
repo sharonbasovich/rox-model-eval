@@ -1,13 +1,15 @@
 # rox-model-eval
 
-Scores frontier models on synthetic sales-assistant tasks (research, drafting, CRM Q&A, tool
-use, extraction, long transcripts, prompt-injection safety) instead of public leaderboards, and
-compares them on quality, cost, speed and safety.
+Scores frontier models on tasks modeled on Rox's product workflows (account research, drafting,
+insights, CRM Q&A, agent tool use, extraction, long transcripts, prompt-injection safety) instead
+of public leaderboards, and compares them on quality, cost, speed and safety. Rerunning it on a
+new model release is one config entry plus one command.
 
-**Scope and assumptions.** The capability list was inferred from endpoint names seen in an
-external security scan; the tasks, weights and gates were written for this harness. None of it is
-drawn from Rox's prompts, data, traffic or current model choices, so results show how models
-compare on these tasks, not how they would perform inside Rox. Capability weights are equal by
+**Where the tasks come from.** Each capability mirrors a Rox product surface observed while
+exploring Rox's web app (chat agent, `insights_v2`, company/people enrichment, deals, campaigns,
+CSV upload). The task data is synthetic, and the tasks are Rox-style rather than copies of Rox's
+internal prompts, so results show how models handle Rox-style workflows, not measurements of
+Rox's production system. Capability weights are equal by
 default, and no baseline model is set: models are compared head-to-head (PASS / PARTIAL / HOLD).
 If a model is marked `baseline: true` (the one actually in use), verdicts become ADOPT / ROUTE /
 HOLD relative to it.
