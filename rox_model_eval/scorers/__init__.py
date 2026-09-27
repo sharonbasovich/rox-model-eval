@@ -1,6 +1,8 @@
 from collections.abc import Callable
 
 from ..types import RunOutput, ScoreBreakdown, Suite, Task
+from .agent_session import score_agent_session
+from .data_ops import score_data_ops
 from .drafting import score_drafting
 from .extraction import score_extraction, score_record
 from .grounded_qa import score_grounded_qa
@@ -21,6 +23,8 @@ SCORERS: dict[str, Scorer] = {
     "tool_calling": score_tool_calling,
     "long_context": score_long_context,
     "safety": score_safety,
+    "agent_session": score_agent_session,
+    "data_ops": score_data_ops,
 }
 
 __all__ = ["SCORERS", "Scorer", "score_record"]

@@ -2,14 +2,16 @@
 # quality over the capabilities that were run; weights renormalised). Equal by default: no
 # real usage mix is known. Replace with the actual traffic mix if it becomes available.
 capabilities:
-  c1_research: 0.125
-  c2_drafting: 0.125
-  c3_insights: 0.125
-  c4_grounded_qa: 0.125
-  c5_tool_calling: 0.125
-  c6_extraction: 0.125
-  c7_long_context: 0.125
-  c8_safety: 0.125
+  c1_research: 0.1
+  c2_drafting: 0.1
+  c3_insights: 0.1
+  c4_grounded_qa: 0.1
+  c5_tool_calling: 0.1
+  c6_extraction: 0.1
+  c7_long_context: 0.1
+  c8_safety: 0.1
+  c9_agent_sessions: 0.1
+  c10_data_ops: 0.1
 
 # Hard gates: failing any one means HOLD for that capability regardless of quality.
 quality_gate: 0.75        # mean quality score (0..1)

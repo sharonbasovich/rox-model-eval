@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from .aggregate import ModelOverall, ModelSummary, RouteRow, label
+from .aggregate import ModelOverall, ModelSummary, RouteRow, cap_order, label
 from .config import Weights
 from .history import Regression
 from .types import Attempt
@@ -106,7 +106,7 @@ def render_markdown(report: RunReport, attempts: list[Attempt]) -> str:
         )
     lines.append("")
 
-    for cap in sorted({s.capability for s in report.capabilities}):
+    for cap in sorted({s.capability for s in report.capabilities}, key=cap_order):
         rows = sorted(
             (s for s in report.capabilities if s.capability == cap), key=lambda s: -s.mean_score
         )
@@ -563,7 +563,7 @@ def _glossary(report: RunReport) -> str:
             )
             + "<table><tr><th>Capability</th><th>Weight</th><th>What it tests</th></tr>"
         )
-        for cap in sorted(report.suites):
+        for cap in sorted(report.suites, key=cap_order):
             info = report.capability_info.get(cap)
             out.append(
                 f"<tr><td>{e(label(cap))}</td><td>{w.capabilities.get(cap, 0):.1%}</td>"
@@ -584,7 +584,7 @@ _REGRESSION_METRIC = {
 
 def render_html(report: RunReport, attempts: list[Attempt]) -> str:
     e = html.escape
-    caps = sorted({s.capability for s in report.capabilities})
+    caps = sorted({s.capability for s in report.capabilities}, key=cap_order)
     models = [o.model_id for o in report.overall]
     cell = {(s.model_id, s.capability): s for s in report.capabilities}
     n_tasks = sum(i.tasks for i in report.capability_info.values())

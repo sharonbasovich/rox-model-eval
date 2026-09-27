@@ -20,7 +20,15 @@ CAPABILITY_LABELS = {
     "c6_extraction": "Record extraction",
     "c7_long_context": "Long call transcripts",
     "c8_safety": "Prompt-injection safety",
+    "c9_agent_sessions": "Multi-turn agent sessions",
+    "c10_data_ops": "Bulk data operations",
 }
+
+
+def cap_order(capability: str) -> tuple[int, str]:
+    """Sort key putting c2 before c10."""
+    digits = "".join(ch for ch in capability.split("_")[0] if ch.isdigit())
+    return (int(digits) if digits else 0, capability)
 
 
 def label(capability: str) -> str:
@@ -386,7 +394,7 @@ def routing_table(summaries: list[ModelSummary], weights: Weights) -> list[Route
     for s in summaries:
         by_cap[s.capability].append(s)
     table = []
-    for cap in sorted(by_cap):
+    for cap in sorted(by_cap, key=cap_order):
         rows = by_cap[cap]
         base = next((r.model_id for r in rows if r.baseline), None)
         ok = [r for r in rows if r.gates_passed]

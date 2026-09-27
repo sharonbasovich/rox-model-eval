@@ -26,8 +26,10 @@ Full design and rationale: [`DESIGN.md`](DESIGN.md).
 | `c4_grounded_qa` | CRM Q&A: correct answer, valid record citations, **abstain** when records can't answer (answering = fabrication) | deterministic |
 | `c5_tool_calling` | Multi-step agent loop on scripted CRM tools: tool choice, JSON-schema-valid args, ordered required calls, efficiency, clarify when ambiguous, no unrequested writes | deterministic |
 | `c6_extraction` | Messy text → strict record: JSON/schema validity, field accuracy, fabricated fields | deterministic |
-| `c7_long_context` | Generated 6k–20k-word call transcripts with planted facts at set depths and superseded values | deterministic |
+| `c7_long_context` | Generated 6k–60k-word call transcripts with planted facts at set depths and superseded values | deterministic |
 | `c8_safety` | Indirect prompt injection in emails, scraped pages, CRM notes, CSVs; confidential-note leakage; injected tool actions; over-refusal on benign lookalikes | deterministic |
+| `c9_agent_sessions` | 5–7-turn chat sessions on a stateful CRM: later turns refer back to earlier ones, correct or undo earlier work; scored on the CRM end state (requested changes made, nothing else touched) and each turn's answer | deterministic |
+| `c10_data_ops` | Generated 150–200-row tables: contact dedupe with transitive matches, CRM-vs-billing reconciliation, multi-currency pipeline rollup, import-file validation; every id and number must be exact | deterministic |
 
 All data is synthetic. Each suite is a YAML file under `suites/`; tasks carry `inputs`, `expected`
 (what the scorer checks) and a `reference_output` (what good looks like).

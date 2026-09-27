@@ -44,9 +44,18 @@ class MockAdapter(ModelAdapter):
     def complete(self, request: ModelRequest) -> ModelResponse:
         oracle = request.offline_oracle or {}
         prompt_text = "\n".join(m.content for m in request.messages)
-        step = sum(1 for m in request.messages if m.role == "assistant" and m.tool_calls)
+        last_user = max((i for i, m in enumerate(request.messages) if m.role == "user"), default=0)
+        turn = sum(1 for m in request.messages if m.role == "user") - 1
+        step = sum(
+            1 for m in request.messages[last_user:] if m.role == "assistant" and m.tool_calls
+        )
         rng = random.Random(
-            _seed(self.spec.id, prompt_text[:4000], str(request.params.get("rep", 0)), str(step))
+            _seed(
+                self.spec.id,
+                prompt_text[:4000],
+                str(request.params.get("rep", 0)),
+                f"{turn}/{step}",
+            )
         )
 
         text = ""
@@ -60,7 +69,11 @@ class MockAdapter(ModelAdapter):
             text = json.dumps({"winner": winner, "rationale": "offline simulated judge"})
         else:
             ref = oracle.get("reference")
-            if isinstance(ref, dict) and "steps" in ref:
+            if isinstance(ref, dict) and "turns" in ref:
+                turns: list[dict[str, Any]] = ref["turns"]
+                current = turns[min(turn, len(turns) - 1)]
+                tool_calls, text = self._agent_step(current, oracle, step, rng)
+            elif isinstance(ref, dict) and "steps" in ref:
                 tool_calls, text = self._agent_step(ref, oracle, step, rng)
             elif isinstance(ref, dict):
                 text = self._corrupt_json(ref, rng)
