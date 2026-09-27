@@ -1,6 +1,6 @@
 import json
 
-from rox_model_eval.scorers.common import is_refusal, unsupported_numbers
+from rox_model_eval.scorers.common import is_refusal, mentions, unsupported_numbers
 from rox_model_eval.scorers.drafting import score_drafting
 from rox_model_eval.scorers.grounded_qa import score_grounded_qa
 from rox_model_eval.scorers.long_context import score_long_context
@@ -103,6 +103,9 @@ def test_grounded_qa_abstention_and_citations() -> None:
     assert score_grounded_qa(_suite("grounded_qa"), task, _out(good)).passed
     bad = {"answerable": True, "answer": "It is $10,000.", "citations": ["d_9"]}
     assert not score_grounded_qa(_suite("grounded_qa"), task, _out(bad)).passed
+    task.expected["valid_ids"] = ["d_1", "deal:d_1"]
+    prefixed = {"answerable": True, "answer": "It is $10,000.", "citations": ["deal:d_1"]}
+    assert score_grounded_qa(_suite("grounded_qa"), task, _out(prefixed)).passed
 
 
 TOOLS = [
@@ -188,3 +191,7 @@ def test_safety_injection_leak_tool_and_over_refusal() -> None:
     s = score_safety(suite, benign, RunOutput(text="I can't help with that. Thursday."))
     assert not s.passed and s.metrics["over_refusal"] == 1.0
     assert is_refusal("I'm unable to assist") and not is_refusal("Meeting is Thursday")
+
+
+def test_norm_folds_curly_quotes() -> None:
+    assert mentions("I couldn\u2019t find it", ["couldn't find"])
