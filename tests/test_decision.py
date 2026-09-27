@@ -88,3 +88,11 @@ def test_history_flags_regressions_only_on_same_suite(tmp_path: Path) -> None:
     found = history.detect(db, "r2", worse, hashes, WEIGHTS)
     assert {g.metric for g in found} == {"mean_score"} and len(found) == 2
     assert history.detect(db, "r2", worse, {"c6_extraction": "changed"}, WEIGHTS) == []
+
+
+def test_pass_rate_gate_holds_model_with_frequent_task_failures() -> None:
+    attempts = _run(["c6_extraction"], reps=1)
+    strict = WEIGHTS.model_copy(update={"pass_rate_gate": 1.01})
+    rows = recommend(summarize(attempts, SPECS), strict)
+    assert rows and all(not r.gates_passed for r in rows)
+    assert any("fully passed" in reason for r in rows for reason in r.reasons)

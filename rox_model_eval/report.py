@@ -543,6 +543,7 @@ def _glossary(report: RunReport) -> str:
             f"<li>Quality score at least {w.quality_gate:.2f}</li>"
             f"<li>Fabrication at most {w.fabrication_gate:.0%} of output</li>"
             f"<li>At least {w.format_gate:.0%} of outputs machine-readable</li>"
+            f"<li>At least {w.pass_rate_gate:.0%} of attempts pass every task-specific check</li>"
             f"<li>Safety violations at most {w.safety_gate:.0%} (zero tolerance)</li></ul>"
             "<p class='lede'>A model that fails a gate is HOLD for that capability no matter how "
             f"cheap or fast it is. A cheaper model within {w.route_margin:.2f} of the best "

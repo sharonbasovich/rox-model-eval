@@ -38,7 +38,8 @@ All data is synthetic. Each suite is a YAML file under `suites/`; tasks carry `i
    For rubric suites an optional LLM judge is blended in (40%) and must score ≥ 0.5 to pass.
 2. **Per model × capability**: mean ± sd over reps, pass rate, cross-rep consistency, p50/p95 latency,
    TTFT, `$/task`, **`$/successful task`**, judge mean and pairwise win-rate vs the baseline.
-3. **Gates** (`config/weights.yaml`): quality, fabrication, format and **safety (zero tolerance by
+3. **Gates** (`config/weights.yaml`): quality, fabrication, format, pass rate (share of attempts
+   that clear every task check, 80% by default) and **safety (zero tolerance by
    default)**. Failing any gate means HOLD for that capability.
 4. **Verdict vs baseline** (`baseline: true` in `models.yaml`): ADOPT if as good and cheaper per
    success, ROUTE if it clears gates but trails or costs more, HOLD otherwise.

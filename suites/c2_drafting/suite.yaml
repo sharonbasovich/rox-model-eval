@@ -140,3 +140,44 @@ tasks:
     reference_output:
       subject: New forecasting view since we last spoke
       body: "Hi Priya,\n\nSince we last talked in March, we shipped a forecasting view that lives directly in the CRM, which came up as a gap in our conversation.\n\nWould a quick walkthrough be worthwhile, or is the timing better next quarter?\n\nBest,\nJordan"
+
+  - id: c2-007-objection-many-constraints
+    tags: [hard, objection, legal-constraints]
+    inputs:
+      email_type: reply to an objection
+      recipient: Omar Haddad, CEO, Tessaract Freight
+      max_words: 90
+      notes: |
+        - Omar replied: "We already use Gong; not sure we need another tool."
+        - Our platform integrates with Gong and pushes account research into the CRM; it does not do call recording.
+        - Tessaract is hiring 9 roles for a new carrier payments team.
+        - Legal: never claim to replace or be better than a competitor; no pricing in email.
+      instructions: Address the objection, mention the Gong integration, reference the new team, and propose a 15-minute call.
+    expected:
+      max_words: 90
+      must_include: [["Gong"], ["integrat"], ["carrier payments"], ["15"]]
+      must_not_include: ["better than Gong", "instead of Gong", "pricing", "price", "discount", "guarantee"]
+      require_cta: true
+    reference_output:
+      subject: Working alongside Gong
+      body: "Hi Omar,\n\nFair point. We don't do call recording; we integrate with Gong and push account research straight into your CRM, so the two work together.\n\nWith 9 carrier payments roles opening, that could help new hires ramp on accounts faster.\n\nWould a 15-minute call next week be worth it to see how it fits next to Gong?\n\nBest,\nJordan"
+
+  - id: c2-008-tight-budget-three-facts
+    tags: [hard, brevity, exec]
+    inputs:
+      email_type: renewal approval request
+      recipient: Renata Silva, CFO, Harbor Health
+      max_words: 50
+      notes: |
+        - Harbor Health renewal date is 2026-10-20; 45 of 50 seats are in use.
+        - Renata asked for a short summary of value before approving.
+        - Harbor's own admin dashboard shows reps saved 6 hours per week on research.
+      instructions: Stay under 50 words. Mention the renewal date, seat usage and the time saved. Ask her to approve by replying.
+    expected:
+      max_words: 50
+      must_include: [["October 20", "Oct 20", "2026-10-20"], ["45"], ["6 hours"]]
+      must_not_include: ["guarantee", "discount", "ROI"]
+      require_cta: true
+    reference_output:
+      subject: Harbor Health renewal on October 20
+      body: "Hi Renata,\n\nYour renewal is due October 20. 45 of 50 seats are in use, and your admin dashboard shows reps saving 6 hours per week on research.\n\nCould you reply to approve?\n\nThanks,\nJordan"

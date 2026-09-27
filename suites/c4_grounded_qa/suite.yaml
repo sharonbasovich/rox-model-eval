@@ -121,3 +121,119 @@ tasks:
     expected:
       answerable: false
     reference_output: {answerable: false, answer: "No phone number is recorded for Priya Raman; only her work email is on file.", citations: []}
+
+  - id: c4-009-aggregate-with-filters
+    tags: [hard, aggregate, entity-trap]
+    inputs:
+      question: What is the total amount of Harbor Health's open deals (anything not closed won or closed lost)?
+      records: |
+        deal:d_401 | account=Harbor Health | amount=$40,000 | stage=proposal
+        deal:d_402 | account=Harbor Health | amount=$25,500 | stage=negotiation
+        deal:d_403 | account=Harbor Health | amount=$60,000 | stage=closed_won
+        deal:d_404 | account=Harbor Health | amount=$18,250 | stage=discovery
+        deal:d_405 | account=Harbor Health | amount=$30,000 | stage=closed_lost
+        deal:d_406 | account=Harbor Health Partners | amount=$50,000 | stage=negotiation
+        deal:d_407 | account=Tidepool | amount=$12,000 | stage=proposal
+    expected:
+      answerable: true
+      valid_ids: [d_401, d_402, d_403, d_404, d_405, d_406, d_407, "deal:d_401", "deal:d_402", "deal:d_403", "deal:d_404", "deal:d_405", "deal:d_406", "deal:d_407"]
+      required_citations: [d_401, d_402, d_404]
+      answer_mentions: [["83,750", "83750", "83.75k"]]
+    reference_output: {answerable: true, answer: "Harbor Health's open deals total $83,750: d_401 ($40,000), d_402 ($25,500) and d_404 ($18,250).", citations: [d_401, d_402, d_404]}
+
+  - id: c4-010-multi-hop
+    tags: [hard, multi-hop, closed-deal-trap]
+    inputs:
+      question: What's the email address of the champion on Ferrovane's largest open deal?
+      records: |
+        deal:d_310 | account=Ferrovane | name=Ferrovane platform | amount=$200,000 | stage=negotiation | champion=c_31
+        deal:d_311 | account=Ferrovane | name=Ferrovane add-on | amount=$35,000 | stage=proposal | champion=c_32
+        deal:d_312 | account=Ferrovane | name=Ferrovane legacy | amount=$250,000 | stage=closed_lost | champion=c_33
+        contact:c_31 | name=Elise Moreau | title=Director of Operations | email=elise.moreau@ferrovane.com
+        contact:c_32 | name=Paul Girard | title=IT Manager | email=paul.girard@ferrovane.com
+        contact:c_33 | name=Nadia Roy | title=VP Engineering | email=nadia.roy@ferrovane.com
+    expected:
+      answerable: true
+      valid_ids: [d_310, d_311, d_312, c_31, c_32, c_33, "deal:d_310", "deal:d_311", "deal:d_312", "contact:c_31", "contact:c_32", "contact:c_33"]
+      required_citations: [d_310, c_31]
+      answer_mentions: [["elise.moreau@ferrovane.com"]]
+    reference_output: {answerable: true, answer: "The largest open Ferrovane deal is d_310 ($200,000); its champion Elise Moreau is at elise.moreau@ferrovane.com.", citations: [d_310, c_31]}
+
+  - id: c4-011-as-of-date
+    tags: [hard, temporal, current-value-trap]
+    inputs:
+      question: Who owned the Tidepool account on 2026-08-15?
+      records: |
+        account:a_20 | name=Tidepool | owner=Priya Nair | tier=mid-market
+        history:h_1 | account=Tidepool | owner changed from Sam Ortiz to Jordan Blake | effective=2026-07-01
+        history:h_2 | account=Tidepool | owner changed from Jordan Blake to Priya Nair | effective=2026-09-01
+    expected:
+      answerable: true
+      valid_ids: [a_20, h_1, h_2, "account:a_20", "history:h_1", "history:h_2"]
+      required_citations: [h_1]
+      answer_mentions: [["Jordan Blake"]]
+    reference_output: {answerable: true, answer: "Jordan Blake owned Tidepool on 2026-08-15; he took over on 2026-07-01 and handed it to Priya Nair on 2026-09-01.", citations: [h_1, h_2]}
+
+  - id: c4-012-unanswerable-near-miss
+    tags: [hard, abstain, fabrication-trap]
+    inputs:
+      question: What was Brightkeel's revenue in Q3 2026?
+      records: |
+        account:a_30 | name=Brightkeel Logistics | arr=$84,000 | owner=Sam Ortiz
+        note:n_51 | account=Brightkeel Logistics | text=On the call they said Q3 bookings were strong and they are hiring drivers.
+        deal:d_501 | account=Brightkeel Logistics | amount=$24,000 | stage=proposal
+    expected:
+      answerable: false
+    reference_output: {answerable: false, answer: "The records show what Brightkeel pays us ($84,000 ARR) and a note that Q3 bookings were strong, but not Brightkeel's own Q3 revenue.", citations: []}
+
+  - id: c4-013-scale-40-records
+    tags: [hard, scale, aggregate, lookalike-owner]
+    inputs:
+      question: What is the total amount of open deals (discovery, proposal or negotiation) owned by Priya Nair with a close date in October 2026?
+      records: |
+        deal:d_700 | account=Harbor Health | owner=Priya Nair | amount=$89,750 | stage=proposal | close=2026-11-20
+        deal:d_701 | account=Quillmesh | owner=Jordan Blake | amount=$115,500 | stage=closed_lost | close=2026-10-08
+        deal:d_702 | account=Harbor Health | owner=Priya Nair | amount=$28,500 | stage=negotiation | close=2026-09-15
+        deal:d_703 | account=Harbor Health | owner=Priya Nair | amount=$133,500 | stage=negotiation | close=2026-10-11
+        deal:d_704 | account=Harbor Health Partners | owner=Sam Ortiz | amount=$109,500 | stage=negotiation | close=2026-10-26
+        deal:d_705 | account=Ferrovane | owner=Priya Nair | amount=$139,250 | stage=negotiation | close=2026-09-18
+        deal:d_706 | account=Quillmesh | owner=Sam Ortiz | amount=$82,750 | stage=closed_won | close=2026-09-21
+        deal:d_707 | account=Brightkeel Logistics | owner=Priya Nair | amount=$87,000 | stage=negotiation | close=2026-10-15
+        deal:d_708 | account=Ferrovane | owner=Jordan Blake | amount=$31,000 | stage=closed_lost | close=2026-11-16
+        deal:d_709 | account=Harbor Health | owner=Priya Nair | amount=$116,750 | stage=negotiation | close=2026-10-26
+        deal:d_710 | account=Quillmesh | owner=Jordan Blake | amount=$133,500 | stage=closed_lost | close=2026-10-28
+        deal:d_711 | account=Ferrovane | owner=Priya Nair | amount=$130,500 | stage=closed_lost | close=2026-09-25
+        deal:d_712 | account=Harbor Health Partners | owner=Priya Nair | amount=$20,500 | stage=closed_lost | close=2026-10-16
+        deal:d_713 | account=Harbor Health Partners | owner=Priya Naidu | amount=$131,250 | stage=discovery | close=2026-11-23
+        deal:d_714 | account=Ferrovane | owner=Priya Nair | amount=$128,000 | stage=negotiation | close=2026-10-18
+        deal:d_715 | account=Tidepool | owner=Sam Ortiz | amount=$110,750 | stage=closed_lost | close=2026-11-17
+        deal:d_716 | account=Brightkeel Logistics | owner=Jordan Blake | amount=$130,500 | stage=closed_won | close=2026-09-10
+        deal:d_717 | account=Tidepool | owner=Priya Nair | amount=$10,250 | stage=proposal | close=2026-11-20
+        deal:d_718 | account=Ferrovane | owner=Jordan Blake | amount=$141,750 | stage=negotiation | close=2026-09-09
+        deal:d_719 | account=Brightkeel Logistics | owner=Jordan Blake | amount=$132,250 | stage=closed_lost | close=2026-10-26
+        deal:d_720 | account=Ferrovane | owner=Sam Ortiz | amount=$16,500 | stage=negotiation | close=2026-10-26
+        deal:d_721 | account=Harbor Health | owner=Sam Ortiz | amount=$120,000 | stage=closed_won | close=2026-09-14
+        deal:d_722 | account=Brightkeel Logistics | owner=Priya Nair | amount=$130,500 | stage=discovery | close=2026-10-21
+        deal:d_723 | account=Tidepool | owner=Sam Ortiz | amount=$135,500 | stage=discovery | close=2026-09-24
+        deal:d_724 | account=Ferrovane | owner=Jordan Blake | amount=$45,250 | stage=discovery | close=2026-09-01
+        deal:d_725 | account=Ferrovane | owner=Priya Nair | amount=$147,750 | stage=closed_lost | close=2026-09-08
+        deal:d_726 | account=Harbor Health | owner=Sam Ortiz | amount=$19,250 | stage=negotiation | close=2026-09-01
+        deal:d_727 | account=Tidepool | owner=Priya Nair | amount=$133,750 | stage=negotiation | close=2026-10-24
+        deal:d_728 | account=Harbor Health Partners | owner=Priya Naidu | amount=$147,500 | stage=closed_won | close=2026-11-05
+        deal:d_729 | account=Quillmesh | owner=Sam Ortiz | amount=$137,000 | stage=discovery | close=2026-10-22
+        deal:d_730 | account=Harbor Health Partners | owner=Sam Ortiz | amount=$42,500 | stage=closed_lost | close=2026-10-13
+        deal:d_731 | account=Harbor Health Partners | owner=Priya Naidu | amount=$141,000 | stage=closed_won | close=2026-09-04
+        deal:d_732 | account=Ferrovane | owner=Priya Nair | amount=$26,750 | stage=negotiation | close=2026-11-12
+        deal:d_733 | account=Harbor Health | owner=Jordan Blake | amount=$14,500 | stage=negotiation | close=2026-11-10
+        deal:d_734 | account=Ferrovane | owner=Priya Nair | amount=$91,250 | stage=closed_won | close=2026-10-19
+        deal:d_735 | account=Quillmesh | owner=Priya Nair | amount=$51,500 | stage=discovery | close=2026-10-19
+        deal:d_736 | account=Quillmesh | owner=Jordan Blake | amount=$60,750 | stage=closed_lost | close=2026-10-15
+        deal:d_737 | account=Quillmesh | owner=Priya Nair | amount=$67,500 | stage=closed_lost | close=2026-10-02
+        deal:d_738 | account=Harbor Health Partners | owner=Priya Nair | amount=$52,250 | stage=closed_lost | close=2026-09-15
+        deal:d_739 | account=Brightkeel Logistics | owner=Jordan Blake | amount=$56,250 | stage=discovery | close=2026-09-21
+    expected:
+      answerable: true
+      valid_ids: [d_700, d_701, d_702, d_703, d_704, d_705, d_706, d_707, d_708, d_709, d_710, d_711, d_712, d_713, d_714, d_715, d_716, d_717, d_718, d_719, d_720, d_721, d_722, d_723, d_724, d_725, d_726, d_727, d_728, d_729, d_730, d_731, d_732, d_733, d_734, d_735, d_736, d_737, d_738, d_739, "deal:d_700", "deal:d_701", "deal:d_702", "deal:d_703", "deal:d_704", "deal:d_705", "deal:d_706", "deal:d_707", "deal:d_708", "deal:d_709", "deal:d_710", "deal:d_711", "deal:d_712", "deal:d_713", "deal:d_714", "deal:d_715", "deal:d_716", "deal:d_717", "deal:d_718", "deal:d_719", "deal:d_720", "deal:d_721", "deal:d_722", "deal:d_723", "deal:d_724", "deal:d_725", "deal:d_726", "deal:d_727", "deal:d_728", "deal:d_729", "deal:d_730", "deal:d_731", "deal:d_732", "deal:d_733", "deal:d_734", "deal:d_735", "deal:d_736", "deal:d_737", "deal:d_738", "deal:d_739"]
+      required_citations: [d_703, d_707, d_709, d_714, d_722, d_727, d_735]
+      answer_mentions: [["781,000", "781000"]]
+    reference_output: {answerable: true, answer: "Priya Nair's open October 2026 deals total $781,000.", citations: [d_703, d_707, d_709, d_714, d_722, d_727, d_735]}

@@ -51,6 +51,7 @@ class Weights(BaseModel):
     fabrication_gate: float = 0.05
     format_gate: float = 0.9
     safety_gate: float = 0.0
+    pass_rate_gate: float = 0.0
     route_margin: float = 0.05
     regression_score_drop: float = 0.05
     regression_fabrication_rise: float = 0.02
