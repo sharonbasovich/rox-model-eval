@@ -1,0 +1,106 @@
+capability: c7_long_context
+name: Long-context synthesis over call transcripts
+description: >
+  Deterministically generated long sales-call transcripts (filler conversation) with planted
+  facts at controlled depths, plus distractors: values stated early and corrected later.
+  Measures needle recall across depth and length, and whether the model uses the latest
+  value rather than a superseded one. Transcript length is set per task via
+  `transcript_spec.target_words`.
+scorer: long_context
+system: >
+  You analyse sales call transcripts for a revenue platform. Answer only from the
+  transcript. When a value is revised later in the call, use the final value. Respond with
+  JSON only.
+prompt_template: |
+  From the transcript, extract: {{fields}}.
+  Return a JSON object with exactly those keys; use null if not stated.
+
+  TRANSCRIPT:
+  {{transcript}}
+tasks:
+  - id: c7-001-budget-revision-6k
+    tags: [6k-words, revision]
+    inputs:
+      fields: budget, decision_date, economic_buyer
+      transcript_spec:
+        seed: 11
+        target_words: 6000
+        needles:
+          - {depth: 0.85, text: "Customer: Update from finance -- the approved budget is now $95,000, not the earlier number."}
+          - {depth: 0.5, text: "Customer: We need to sign by November 14 to make the fiscal year."}
+          - {depth: 0.3, text: "Customer: Final sign-off sits with our CFO, Renata Silva."}
+        distractors:
+          - {depth: 0.15, text: "Customer: Our budget for this is roughly $120,000."}
+    expected:
+      fields:
+        budget: ["95,000", "95000", "95k"]
+        decision_date: ["November 14", "Nov 14", "11-14"]
+        economic_buyer: ["Renata Silva"]
+      traps:
+        budget: ["120,000", "120000", "120k"]
+    reference_output: {budget: "$95,000", decision_date: "November 14", economic_buyer: "Renata Silva"}
+
+  - id: c7-002-competitor-deep-12k
+    tags: [12k-words, deep-needle]
+    inputs:
+      fields: competitor, primary_blocker, seats
+      transcript_spec:
+        seed: 22
+        target_words: 12000
+        needles:
+          - {depth: 0.92, text: "Customer (IT): The real blocker is that we need SCIM provisioning before security signs off."}
+          - {depth: 0.08, text: "Customer: Just so you know, we're also looking at Northwind CRM Suite."}
+          - {depth: 0.6, text: "Customer: After re-scoping with the regional leads we landed on 85 seats."}
+        distractors:
+          - {depth: 0.35, text: "Customer: We're thinking around 150 seats to start, but that could change."}
+    expected:
+      fields:
+        competitor: ["Northwind"]
+        primary_blocker: ["SCIM"]
+        seats: ["85"]
+      traps:
+        seats: ["150"]
+    reference_output: {competitor: "Northwind CRM Suite", primary_blocker: "SCIM provisioning required by security", seats: 85}
+
+  - id: c7-003-champion-change-20k
+    tags: [20k-words, revision]
+    inputs:
+      fields: champion, next_step, pilot_start
+      transcript_spec:
+        seed: 33
+        target_words: 20000
+        needles:
+          - {depth: 0.7, text: "Customer: Quick heads up, Marco is moving teams, so Aisha Patel will be your main point of contact from here."}
+          - {depth: 0.95, text: "Rep: So the next step is a security review call with your IT team on Thursday."}
+          - {depth: 0.45, text: "Customer: We'd like the pilot to start on October 20."}
+        distractors:
+          - {depth: 0.1, text: "Customer: Marco Bianchi will be driving this internally, he's our champion."}
+    expected:
+      fields:
+        champion: ["Aisha Patel"]
+        next_step: ["security review"]
+        pilot_start: ["October 20", "Oct 20", "10-20"]
+      traps:
+        champion: ["Marco"]
+    reference_output: {champion: "Aisha Patel", next_step: "Security review call with IT on Thursday", pilot_start: "October 20"}
+
+  - id: c7-004-many-needles-8k
+    tags: [8k-words, multi-needle]
+    inputs:
+      fields: current_tool, contract_end, integration_required, region
+      transcript_spec:
+        seed: 44
+        target_words: 8000
+        needles:
+          - {depth: 0.2, text: "Customer: Today everything runs through Pipestack, which we've used for years."}
+          - {depth: 0.4, text: "Customer: The Pipestack contract ends March 31, so timing works."}
+          - {depth: 0.65, text: "Customer (IT): Any tool has to integrate with our Snowflake warehouse, that's non-negotiable."}
+          - {depth: 0.9, text: "Customer: Rollout would be EMEA first, then North America later."}
+        distractors: []
+    expected:
+      fields:
+        current_tool: ["Pipestack"]
+        contract_end: ["March 31", "Mar 31", "03-31"]
+        integration_required: ["Snowflake"]
+        region: ["EMEA"]
+    reference_output: {current_tool: "Pipestack", contract_end: "March 31", integration_required: "Snowflake", region: "EMEA"}

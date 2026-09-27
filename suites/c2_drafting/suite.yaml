@@ -1,0 +1,142 @@
+capability: c2_drafting
+name: Outbound and follow-up email drafting
+description: >
+  Emails a rep would actually send. Hard constraints come from the kind of rules sales and
+  legal teams enforce: word budgets, personalisation that must reference real account facts,
+  banned phrases (competitor disparagement, guarantees, spam triggers), a call to action,
+  and no invented numbers. Tone and persuasiveness are left to the judge.
+scorer: drafting
+system: >
+  You write emails for account executives at a B2B software company that sells an AI
+  revenue platform. Use only facts from the account notes. Never promise discounts,
+  guarantees or outcomes, never disparage competitors, and keep to the word limit.
+  Respond with JSON only: {"subject": "...", "body": "..."}.
+prompt_template: |
+  Write a {{email_type}} email.
+
+  TO: {{recipient}}
+  WORD LIMIT (body): {{max_words}}
+  ACCOUNT NOTES:
+  {{notes}}
+  EXTRA INSTRUCTIONS: {{instructions}}
+judge_rubric:
+  - "personalization: clearly written for this recipient using the account notes"
+  - "tone: professional, warm, not pushy or generic"
+  - "clarity: one clear point and an easy next step"
+  - "groundedness: no claims beyond the notes"
+tasks:
+  - id: c2-001-first-touch
+    tags: [cold, personalization]
+    inputs:
+      email_type: first-touch outbound
+      recipient: Maya Chen, Chief Revenue Officer, Lumenfold Analytics
+      max_words: 120
+      notes: |
+        - Maya joined Lumenfold as CRO in May 2026 (previously at Datalyst).
+        - Lumenfold raised a Series B and is hiring 14 RevOps and SDR roles.
+        - Our platform auto-researches accounts and drafts follow-ups inside the CRM.
+      instructions: Suggest a short call.
+    expected:
+      max_words: 120
+      must_include: [["Maya"], ["CRO", "Chief Revenue Officer", "new role", "joining"], ["hiring", "SDR", "RevOps", "team"]]
+      must_not_include: ["guarantee", "free trial forever", "Datalyst is", "10x"]
+      require_cta: true
+    reference_output:
+      subject: Scaling Lumenfold's new SDR team
+      body: "Hi Maya,\n\nCongratulations on stepping into the CRO role at Lumenfold. With 14 RevOps and SDR roles open after the Series B, ramping new reps quickly is probably top of mind.\n\nOur platform researches accounts and drafts follow-ups directly in the CRM, so new SDRs spend their time selling rather than digging.\n\nWould a 20-minute call next week be useful to see whether it fits your plan?\n\nBest,\nJordan"
+
+  - id: c2-002-post-demo-followup
+    tags: [followup]
+    inputs:
+      email_type: post-demo follow-up
+      recipient: Dana Okafor, COO, Quillmesh
+      max_words: 150
+      notes: |
+        - Demo held Tuesday. Dana liked the Slack digest; asked about SOC 2 and SSO.
+        - We have SOC 2 Type II; SSO via Okta and Google is supported.
+        - Next step discussed: a pilot with the 5-person ops team.
+      instructions: Answer her questions and propose the pilot.
+    expected:
+      max_words: 150
+      must_include: [["SOC 2"], ["SSO", "single sign-on"], ["pilot"], ["Slack"]]
+      must_not_include: ["guarantee", "discount"]
+      require_cta: true
+    reference_output:
+      subject: SOC 2, SSO and next steps for the pilot
+      body: "Hi Dana,\n\nThanks for Tuesday's session. Glad the Slack digest landed well.\n\nOn your questions: we hold SOC 2 Type II and support SSO through Okta and Google.\n\nAs discussed, a pilot with your 5-person ops team would be the fastest way to see the impact. Could we pick a start date on a quick call this week?\n\nBest,\nJordan"
+
+  - id: c2-003-sensitive-context
+    tags: [sensitivity, trap]
+    inputs:
+      email_type: check-in
+      recipient: Lucia Ferrer, CEO, Tidepool Robotics
+      max_words: 100
+      notes: |
+        - Tidepool just announced a hiring freeze and paused its European expansion.
+        - They trialed our product in Q1 but did not buy.
+      instructions: Be sensitive to their situation; focus on doing more with the existing team.
+    expected:
+      max_words: 100
+      must_include: [["existing team", "current team", "team you have", "with fewer", "more with"]]
+      must_not_include: ["congratulations on your growth", "congrats on the growth", "exciting expansion", "rapid growth", "limited-time", "act now"]
+      require_cta: true
+    reference_output:
+      subject: Getting more from the current team
+      body: "Hi Lucia,\n\nI saw the recent news and know priorities have shifted. When hiring is paused, the leverage comes from helping the current team spend less time on research and admin.\n\nIf useful, I can share how teams your size use our platform to do more with the people they already have. Open to a brief call later this month?\n\nBest,\nJordan"
+
+  - id: c2-004-competitor-displacement
+    tags: [competitor, legal]
+    inputs:
+      email_type: competitive displacement
+      recipient: Tomasz Wierzbicki, Head of Procurement, Brightkeel Logistics
+      max_words: 130
+      notes: |
+        - Brightkeel uses a legacy sales-intelligence tool and complained its data is often stale.
+        - Our platform refreshes account data continuously from multiple sources.
+      instructions: Do not name or disparage the competitor.
+    expected:
+      max_words: 130
+      must_include: [["stale", "out of date", "outdated data", "fresh"], ["Tomasz"]]
+      must_not_include: ["ZoomInfo", "Apollo", "Clay", "terrible", "garbage", "worse than", "guarantee"]
+      require_cta: true
+    reference_output:
+      subject: Fresher account data for Brightkeel
+      body: "Hi Tomasz,\n\nYou mentioned that stale account data slows your team down. Our platform refreshes account information continuously from multiple sources, so reps work from current facts.\n\nWould you be open to a short call to compare a few of your accounts side by side?\n\nBest,\nJordan"
+
+  - id: c2-005-exec-brevity
+    tags: [brevity]
+    inputs:
+      email_type: executive intro
+      recipient: Elena Vasquez, Director of IT, Harborline Credit Union
+      max_words: 70
+      notes: |
+        - Harborline is evaluating three vendors this quarter.
+        - Our platform is deployed at other credit unions.
+      instructions: Very short. One question at the end.
+    expected:
+      max_words: 70
+      must_include: [["Elena"], ["credit union"]]
+      must_not_include: ["guarantee", "best in the world", "#1"]
+      require_cta: true
+    reference_output:
+      subject: Your vendor evaluation this quarter
+      body: "Hi Elena,\n\nI understand Harborline is evaluating vendors this quarter. Other credit unions use our platform to keep member and account data current for their teams.\n\nWould it help to add us to your shortlist?\n\nJordan"
+
+  - id: c2-006-no-invented-proof
+    tags: [fabrication-trap]
+    inputs:
+      email_type: re-engagement
+      recipient: Priya Raman, VP Revenue Operations, Lumenfold Analytics
+      max_words: 120
+      notes: |
+        - Priya went dark after pricing discussion in March.
+        - We shipped a new CRM-native forecasting view since then.
+      instructions: Do not cite customer statistics or ROI numbers; we have none approved.
+    expected:
+      max_words: 120
+      must_include: [["forecast"], ["Priya"]]
+      must_not_include: ["ROI of", "% increase", "% more pipeline", "customers saw", "guarantee"]
+      require_cta: true
+    reference_output:
+      subject: New forecasting view since we last spoke
+      body: "Hi Priya,\n\nSince we last talked in March, we shipped a forecasting view that lives directly in the CRM, which came up as a gap in our conversation.\n\nWould a quick walkthrough be worthwhile, or is the timing better next quarter?\n\nBest,\nJordan"

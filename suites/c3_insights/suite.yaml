@@ -1,0 +1,100 @@
+capability: c3_insights
+name: Insights and prioritisation
+description: >
+  Ranking deals, accounts and leads the way a sales manager would, from structured CRM
+  snapshots. Each list hides one decisive signal (a champion leaving, a competitor in
+  late-stage, an imminent renewal with low usage) that should drive the top pick.
+scorer: ranking
+system: >
+  You are the insights engine of a revenue platform. Rank the items strictly by the
+  criterion given, using only the data provided. Respond with JSON only:
+  {"ranking": ["<id>", ...], "top_reason": "<one sentence on why the first item is first>"}.
+  Include every id exactly once.
+prompt_template: |
+  {{question}}
+
+  DATA:
+  {{data}}
+judge_rubric:
+  - "reasoning: the top_reason names the decisive signal in the data"
+  - "actionability: a manager could act on the ranking today"
+tasks:
+  - id: c3-001-deal-risk
+    tags: [deal-risk]
+    inputs:
+      question: Rank these open deals from MOST to LEAST at risk of slipping out of this quarter.
+      data: |
+        D1 Lumenfold  $120k  stage=negotiation  close=2026-09-30  last_activity=2 days ago  champion=active
+        D2 Quillmesh  $45k   stage=proposal     close=2026-09-30  last_activity=19 days ago champion=left company 2026-09-10
+        D3 Ferrovane  $200k  stage=negotiation  close=2026-10-15  last_activity=5 days ago  champion=active  legal review started
+        D4 Brightkeel $60k   stage=discovery    close=2026-09-30  last_activity=8 days ago  champion=active
+    expected:
+      ideal_order: [D2, D4, D1, D3]
+      top_reason_mentions: [["champion", "left"]]
+    reference_output:
+      ranking: [D2, D4, D1, D3]
+      top_reason: D2's champion left the company and there has been no activity for 19 days with close due this month.
+
+  - id: c3-002-renewal-risk
+    tags: [renewal]
+    inputs:
+      question: Rank these customers by churn risk at renewal, highest first.
+      data: |
+        A1 Harbor Health   renewal=2026-10-20  seats_used=45/50  nps=9  open_tickets=1
+        A2 Tidepool        renewal=2026-10-05  seats_used=3/20   nps=4  open_tickets=6  hiring_freeze=true
+        A3 Brightkeel      renewal=2027-03-01  seats_used=30/40  nps=7  open_tickets=2
+        A4 Quillmesh       renewal=2026-11-01  seats_used=10/25  nps=6  open_tickets=3
+    expected:
+      ideal_order: [A2, A4, A3, A1]
+      top_reason_mentions: [["seats", "usage", "3/20", "utilization"]]
+    reference_output:
+      ranking: [A2, A4, A3, A1]
+      top_reason: Tidepool renews in days with only 3 of 20 seats used, low NPS, many open tickets and a hiring freeze.
+
+  - id: c3-003-expansion
+    tags: [expansion]
+    inputs:
+      question: Rank these accounts by expansion opportunity (upsell likelihood), highest first.
+      data: |
+        E1 Lumenfold   seats_used=48/50  new_funding=Series B  hiring=14 sales roles
+        E2 Ferrovane   seats_used=12/40  new_funding=none      hiring=none
+        E3 Harbor      seats_used=30/35  new_funding=none      hiring=3 sales roles
+        E4 Quillmesh   seats_used=9/10   new_funding=none      hiring=none
+    expected:
+      ideal_order: [E1, E3, E4, E2]
+      top_reason_mentions: [["hiring", "Series B", "funding"]]
+    reference_output:
+      ranking: [E1, E3, E4, E2]
+      top_reason: Lumenfold is at 48 of 50 seats, just raised a Series B and is hiring 14 sales roles.
+
+  - id: c3-004-competitor-late-stage
+    tags: [competitive]
+    inputs:
+      question: Which deals need executive sponsor involvement most urgently? Rank highest first.
+      data: |
+        P1 Harborline  $80k   stage=negotiation  competitor=none         exec_engaged=yes
+        P2 Brightkeel  $150k  stage=negotiation  competitor=in final 2   exec_engaged=no
+        P3 Tidepool    $20k   stage=discovery    competitor=unknown      exec_engaged=no
+        P4 Lumenfold   $90k   stage=proposal     competitor=evaluated    exec_engaged=no
+    expected:
+      ideal_order: [P2, P4, P3, P1]
+      top_reason_mentions: [["competitor", "final"]]
+    reference_output:
+      ranking: [P2, P4, P3, P1]
+      top_reason: Brightkeel is a $150k deal in negotiation with a competitor in the final two and no executive engaged.
+
+  - id: c3-005-lead-priority
+    tags: [leads]
+    inputs:
+      question: Rank these inbound leads by who the SDR should call first.
+      data: |
+        L1 student at state university, downloaded ebook, company=none
+        L2 VP Sales at 400-person SaaS company, requested demo today, uses competitor with renewal next month
+        L3 Marketing manager at 30-person agency, attended webinar last month
+        L4 Director RevOps at 1,500-person company, visited pricing page 3 times this week
+    expected:
+      ideal_order: [L2, L4, L3, L1]
+      top_reason_mentions: [["demo"]]
+    reference_output:
+      ranking: [L2, L4, L3, L1]
+      top_reason: L2 is a VP Sales who requested a demo today and has a competitor renewal next month.

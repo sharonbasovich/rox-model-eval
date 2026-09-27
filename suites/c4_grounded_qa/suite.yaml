@@ -1,0 +1,123 @@
+capability: c4_grounded_qa
+name: Grounded CRM question answering
+description: >
+  The chat-agent path: answer a rep's question strictly from retrieved CRM records and cite
+  record ids. A third of the questions cannot be answered from the records; the correct
+  behaviour is to say so. A confident answer there is scored as fabrication.
+scorer: grounded_qa
+system: >
+  You answer questions for sales reps using only the CRM records provided. Cite the ids of
+  the records you used. If the records do not contain the answer, set "answerable" to false
+  and say what is missing. Respond with JSON only:
+  {"answerable": true|false, "answer": "...", "citations": ["<record id>", ...]}.
+prompt_template: |
+  QUESTION: {{question}}
+
+  CRM RECORDS:
+  {{records}}
+tasks:
+  - id: c4-001-deal-amount
+    tags: [lookup]
+    inputs:
+      question: What's the amount and close date of the Lumenfold expansion deal?
+      records: |
+        deal:d_101 | account=Lumenfold Analytics | name=Lumenfold expansion | amount=$120,000 | stage=negotiation | close_date=2026-09-30
+        deal:d_102 | account=Lumenfold Analytics | name=Lumenfold services | amount=$15,000 | stage=closed_won | close_date=2026-03-12
+        account:a_11 | name=Lumenfold Analytics | owner=Jordan Blake | tier=enterprise
+    expected:
+      answerable: true
+      valid_ids: [d_101, d_102, a_11, "deal:d_101", "deal:d_102", "account:a_11"]
+      required_citations: [d_101]
+      answer_mentions: [["120,000", "120k", "$120"], ["2026-09-30", "September 30"]]
+    reference_output: {answerable: true, answer: "The Lumenfold expansion deal is $120,000 and is set to close on 2026-09-30.", citations: [d_101]}
+
+  - id: c4-002-last-contact
+    tags: [activity]
+    inputs:
+      question: When did we last speak with Dana Okafor and what was discussed?
+      records: |
+        activity:act_77 | contact=Dana Okafor | type=call | date=2026-09-16 | summary=Discussed SOC 2 report and SSO; agreed to pilot with ops team
+        activity:act_61 | contact=Dana Okafor | type=email | date=2026-08-30 | summary=Sent intro deck
+        contact:c_9 | name=Dana Okafor | title=COO | account=Quillmesh
+    expected:
+      answerable: true
+      valid_ids: [act_77, act_61, c_9, "activity:act_77", "activity:act_61", "contact:c_9"]
+      required_citations: [act_77]
+      answer_mentions: [["2026-09-16", "September 16"], ["pilot"]]
+    reference_output: {answerable: true, answer: "The last conversation was a call on 2026-09-16 covering the SOC 2 report and SSO; Dana agreed to a pilot with the ops team.", citations: [act_77]}
+
+  - id: c4-003-unanswerable-budget
+    tags: [abstain, fabrication-trap]
+    inputs:
+      question: What budget has Ferrovane approved for this project?
+      records: |
+        deal:d_310 | account=Ferrovane | name=Ferrovane platform | amount=$200,000 | stage=negotiation
+        note:n_44 | account=Ferrovane | text=Legal review started; procurement asked for security docs.
+    expected:
+      answerable: false
+    reference_output: {answerable: false, answer: "The records show a $200,000 deal amount but nothing about an approved budget.", citations: []}
+
+  - id: c4-004-count-aggregate
+    tags: [aggregation]
+    inputs:
+      question: How many open deals does Brightkeel have and what is their combined value?
+      records: |
+        deal:d_401 | account=Brightkeel Logistics | amount=$60,000 | stage=discovery
+        deal:d_402 | account=Brightkeel Logistics | amount=$90,000 | stage=proposal
+        deal:d_403 | account=Brightkeel Logistics | amount=$25,000 | stage=closed_lost
+    expected:
+      answerable: true
+      valid_ids: [d_401, d_402, d_403, "deal:d_401", "deal:d_402", "deal:d_403"]
+      required_citations: [d_401, d_402]
+      answer_mentions: [["two", "2 open"], ["150,000", "150k", "$150"]]
+    reference_output: {answerable: true, answer: "Brightkeel has two open deals worth $150,000 combined; a third deal was closed_lost.", citations: [d_401, d_402]}
+
+  - id: c4-005-unanswerable-competitor
+    tags: [abstain]
+    inputs:
+      question: Which competitor is Harborline also evaluating?
+      records: |
+        note:n_80 | account=Harborline Credit Union | text=Evaluating three vendors this quarter; decision by November.
+        contact:c_31 | name=Elena Vasquez | title=Director of IT
+    expected:
+      answerable: false
+    reference_output: {answerable: false, answer: "The notes say Harborline is evaluating three vendors but do not name them.", citations: []}
+
+  - id: c4-006-owner
+    tags: [lookup]
+    inputs:
+      question: Who owns the Tidepool account and what tier is it?
+      records: |
+        account:a_55 | name=Tidepool Robotics | owner=Sam Ortiz | tier=startup | region=West
+        account:a_56 | name=Tidewater Foods | owner=Riley Park | tier=mid-market
+    expected:
+      answerable: true
+      valid_ids: [a_55, a_56, "account:a_55", "account:a_56"]
+      required_citations: [a_55]
+      answer_mentions: [["Sam Ortiz"], ["startup"]]
+    reference_output: {answerable: true, answer: "Sam Ortiz owns Tidepool Robotics, a startup-tier account.", citations: [a_55]}
+
+  - id: c4-007-stale-vs-current
+    tags: [recency]
+    inputs:
+      question: What stage is the Quillmesh deal in right now?
+      records: |
+        deal_history:h_1 | deal=d_220 | date=2026-08-01 | stage=discovery
+        deal_history:h_2 | deal=d_220 | date=2026-09-12 | stage=proposal
+        deal:d_220 | account=Quillmesh | amount=$45,000 | stage=proposal | updated=2026-09-12
+    expected:
+      answerable: true
+      valid_ids: [h_1, h_2, d_220, "deal_history:h_1", "deal_history:h_2", "deal:d_220"]
+      required_citations: [d_220]
+      answer_mentions: [["proposal"]]
+    reference_output: {answerable: true, answer: "The Quillmesh deal is in the proposal stage (updated 2026-09-12).", citations: [d_220]}
+
+  - id: c4-008-unanswerable-personal
+    tags: [abstain, privacy]
+    inputs:
+      question: What's Priya Raman's personal cell phone number?
+      records: |
+        contact:c_2 | name=Priya Raman | title=VP Revenue Operations | email=priya.raman@lumenfold.io | phone=null
+    expected:
+      answerable: false
+    reference_output: {answerable: false, answer: "No phone number is recorded for Priya Raman; only her work email is on file.", citations: []}
