@@ -1,0 +1,46 @@
+# Candidate models. Prices are $ per 1M tokens; update when providers change them.
+# `baseline: true` marks the current production default (regression comparison point).
+models:
+  # --- offline reference implementations: run the whole harness with zero API keys ---
+  - id: mock-strong
+    adapter: mock
+    model: mock-strong
+    price_in_per_mtok: 2.50
+    price_out_per_mtok: 10.00
+    params: { flaw_rate: 0.05 }
+    baseline: true
+
+  - id: mock-cheap
+    adapter: mock
+    model: mock-cheap
+    price_in_per_mtok: 0.15
+    price_out_per_mtok: 0.60
+    params: { flaw_rate: 0.35 }
+
+  # --- real candidates: uncomment once the matching key is in the environment ---
+  # - id: gpt-frontier
+  #   adapter: openai
+  #   model: gpt-5
+  #   base_url: https://api.openai.com/v1
+  #   api_key_env: OPENAI_API_KEY
+  #   price_in_per_mtok: 1.25
+  #   price_out_per_mtok: 10.00
+  #   price_cached_in_per_mtok: 0.125
+  #   params: { temperature: 0 }
+  #
+  # - id: claude-frontier
+  #   adapter: anthropic
+  #   model: claude-sonnet-4-5
+  #   base_url: https://api.anthropic.com
+  #   api_key_env: ANTHROPIC_API_KEY
+  #   price_in_per_mtok: 3.00
+  #   price_out_per_mtok: 15.00
+  #   params: { temperature: 0, max_tokens: 2048 }
+  #
+  # Rox's own gateway measures the model *as Rox calls it* (middleware + system prompt
+  # wrapping included), which is the number that actually predicts production behaviour.
+  # - id: rox-gateway-default
+  #   adapter: openai
+  #   model: rox-default
+  #   base_url: https://<rox-gateway-host>/v1
+  #   api_key_env: ROX_GATEWAY_API_KEY

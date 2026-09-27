@@ -1,0 +1,15 @@
+# Capability weights for the composite Rox Fitness Score.
+# These are a starting hypothesis about Rox's traffic mix -- reweight with real data.
+capabilities:
+  c1_research: 0.15
+  c2_drafting: 0.20
+  c3_insights: 0.10
+  c4_grounded_qa: 0.15
+  c5_tool_calling: 0.20
+  c6_extraction: 0.10
+  c7_long_context: 0.05
+  c8_safety: 0.05
+
+# Gates: a model below these is not adoptable regardless of how good its quality score is.
+quality_gate: 0.75
+fabrication_gate: 0.05

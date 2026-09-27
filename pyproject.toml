@@ -1,0 +1,42 @@
+[project]
+name = "rox-model-eval"
+version = "0.1.0"
+description = "Frontier-model fitness harness for Rox capabilities"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic==2.13.5",
+  "PyYAML==6.0.3",
+  "httpx==0.28.1",
+  "jsonschema==4.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "ruff==0.16.9",
+  "mypy==2.3.1",
+  "types-PyYAML",
+  "types-jsonschema",
+]
+
+[project.scripts]
+rox-eval = "rox_model_eval.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["rox_model_eval*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
