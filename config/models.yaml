@@ -33,6 +33,16 @@ models:
     price_cached_in_per_mtok: 0.20
     params: { reasoning: { effort: low } }
 
+  - id: gpt-6.1-sol
+    adapter: openai_responses
+    model: gpt-6.1-sol
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 2.00
+    price_out_per_mtok: 10.00
+    price_cached_in_per_mtok: 0.10
+    params: { reasoning: { effort: low } }
+
   - id: gpt-6-luna
     adapter: openai_responses
     model: gpt-6-luna
