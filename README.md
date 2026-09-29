@@ -1,8 +1,18 @@
 # rox-model-eval
 
-Scores frontier models on **Rox's own jobs** — not public leaderboards — and emits an
-**ADOPT / ROUTE / HOLD** decision per capability and overall. Built for the question that comes up
-at every model release: *should Rox switch to, route some traffic to, or ignore this model?*
+Scores frontier models on tasks modeled on Rox's product workflows (account research, drafting,
+insights, CRM Q&A, agent tool use, extraction, long transcripts, prompt-injection safety) instead
+of public leaderboards, and compares them on quality, cost, speed and safety. Rerunning it on a
+new model release is one config entry plus one command.
+
+**Where the tasks come from.** Each capability mirrors a Rox product surface observed while
+exploring Rox's web app (chat agent, `insights_v2`, company/people enrichment, deals, campaigns,
+CSV upload). The task data is synthetic, and the tasks are Rox-style rather than copies of Rox's
+internal prompts, so results show how models handle Rox-style workflows, not measurements of
+Rox's production system. Capability weights are equal by
+default, and no baseline model is set: models are compared head-to-head (PASS / PARTIAL / HOLD).
+If a model is marked `baseline: true` (the one actually in use), verdicts become ADOPT / ROUTE /
+HOLD relative to it.
 
 Full design and rationale: [`DESIGN.md`](DESIGN.md).
 
@@ -16,8 +26,10 @@ Full design and rationale: [`DESIGN.md`](DESIGN.md).
 | `c4_grounded_qa` | CRM Q&A: correct answer, valid record citations, **abstain** when records can't answer (answering = fabrication) | deterministic |
 | `c5_tool_calling` | Multi-step agent loop on scripted CRM tools: tool choice, JSON-schema-valid args, ordered required calls, efficiency, clarify when ambiguous, no unrequested writes | deterministic |
 | `c6_extraction` | Messy text → strict record: JSON/schema validity, field accuracy, fabricated fields | deterministic |
-| `c7_long_context` | Generated 6k–20k-word call transcripts with planted facts at set depths and superseded values | deterministic |
+| `c7_long_context` | Generated 6k–60k-word call transcripts with planted facts at set depths and superseded values | deterministic |
 | `c8_safety` | Indirect prompt injection in emails, scraped pages, CRM notes, CSVs; confidential-note leakage; injected tool actions; over-refusal on benign lookalikes | deterministic |
+| `c9_agent_sessions` | 5–7-turn chat sessions on a stateful CRM: later turns refer back to earlier ones, correct or undo earlier work; scored on the CRM end state (requested changes made, nothing else touched) and each turn's answer | deterministic |
+| `c10_data_ops` | Generated 150–200-row tables: contact dedupe with transitive matches, CRM-vs-billing reconciliation, multi-currency pipeline rollup, import-file validation; every id and number must be exact | deterministic |
 
 All data is synthetic. Each suite is a YAML file under `suites/`; tasks carry `inputs`, `expected`
 (what the scorer checks) and a `reference_output` (what good looks like).
@@ -28,7 +40,8 @@ All data is synthetic. Each suite is a YAML file under `suites/`; tasks carry `i
    For rubric suites an optional LLM judge is blended in (40%) and must score ≥ 0.5 to pass.
 2. **Per model × capability**: mean ± sd over reps, pass rate, cross-rep consistency, p50/p95 latency,
    TTFT, `$/task`, **`$/successful task`**, judge mean and pairwise win-rate vs the baseline.
-3. **Gates** (`config/weights.yaml`): quality, fabrication, format and **safety (zero tolerance by
+3. **Gates** (`config/weights.yaml`): quality, fabrication, format, pass rate (share of attempts
+   that clear every task check, 80% by default) and **safety (zero tolerance by
    default)**. Failing any gate means HOLD for that capability.
 4. **Verdict vs baseline** (`baseline: true` in `models.yaml`): ADOPT if as good and cheaper per
    success, ROUTE if it clears gates but trails or costs more, HOLD otherwise.
@@ -61,15 +74,15 @@ injections). They are **not** measurements of any model; the scorecard says so.
 
 ```bash
 export OPENAI_API_KEY=...
-# 1. uncomment gpt-frontier / gpt-frontier-mini in config/models.yaml (check ids + prices)
-# 2. mark the model Rox runs in production today as `baseline: true`
-# 3. calibrate the judge before trusting judge-blended scores
-python -m rox_model_eval calibrate --judge gpt-frontier
-python -m rox_model_eval run --models gpt-frontier,gpt-frontier-mini --suite all --reps 3 --judge gpt-frontier
+# gpt-6-sol and gpt-6-luna are configured in config/models.yaml; recheck prices
+# optionally mark the model actually in use as `baseline: true`
+# calibrate the judge before trusting judge-blended scores
+python -m rox_model_eval calibrate --judge gpt-6-sol
+python -m rox_model_eval run --models gpt-6-sol,gpt-6-luna --suite all --reps 1 --judge gpt-6-sol
 ```
 
-Any OpenAI-compatible endpoint works (`adapter: openai` + `base_url`), including a Rox model gateway,
-which measures models exactly as Rox calls them. Anthropic uses `adapter: anthropic`.
+Any OpenAI-compatible endpoint works (`adapter: openai` + `base_url`), including an internal model
+gateway if one exists and access is granted. Anthropic uses `adapter: anthropic`.
 
 A judge from the same family as a candidate can favour it; for decisions prefer a judge from a
 different provider, or rely on the deterministic columns.
@@ -77,14 +90,14 @@ different provider, or rely on the deterministic columns.
 ## Evaluating a newly released model
 
 1. Add an entry to `config/models.yaml` (`adapter`, `model`, `api_key_env`, current prices).
-2. Run it alongside the baseline: `--models <baseline-id>,<new-id> --suite all`.
+2. Run it alongside the models to compare: `--models <id-a>,<new-id> --suite all`.
 3. Read the overall verdict, routing table and "worst failures" receipts in `scorecard.html`.
 
 ## Adding tasks or suites
 
 - Add tasks to an existing `suites/<name>/suite.yaml`; `pytest` checks that every task's
   `reference_output` passes its own scorer, so broken labels fail CI.
-- Replace `calibration/labels.yaml` with labels from Rox reviewers before relying on the judge.
+- Replace `calibration/labels.yaml` with labels from real human reviewers before relying on the judge.
 
 ## Development
 

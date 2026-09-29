@@ -13,7 +13,11 @@ import re
 from ..types import RunOutput, ScoreBreakdown, Suite, Task
 from .common import coverage, flatten_inputs, mentions, parse_json, unsupported_numbers
 
-_CTA = re.compile(r"\?|\b(call|chat|meet|meeting|demo|calendar|time next week|15 minutes)\b", re.I)
+_CTA = re.compile(
+    r"\?|\b(call|chat|meet|meeting|demo|calendar|time next week|15 minutes|reply|replying|"
+    r"let me know)\b",
+    re.I,
+)
 
 
 def score_drafting(suite: Suite, task: Task, output: RunOutput) -> ScoreBreakdown:

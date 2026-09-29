@@ -3,10 +3,12 @@ from .anthropic import AnthropicAdapter
 from .base import ModelAdapter
 from .mock import MockAdapter
 from .openai_compatible import OpenAICompatibleAdapter
+from .openai_responses import OpenAIResponsesAdapter
 
 ADAPTERS: dict[str, type[ModelAdapter]] = {
     "mock": MockAdapter,
     "openai": OpenAICompatibleAdapter,
+    "openai_responses": OpenAIResponsesAdapter,
     "anthropic": AnthropicAdapter,
 }
 

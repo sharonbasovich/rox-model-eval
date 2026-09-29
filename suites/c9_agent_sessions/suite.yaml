@@ -1,0 +1,406 @@
+capability: c9_agent_sessions
+name: Multi-turn stateful CRM agent sessions
+description: >
+  A rep works with the Rox-style chat agent across 5-7 turns against a stateful CRM: reads
+  reflect earlier writes, later requests refer back to earlier answers ("the deal you just
+  closed"), and some turns correct or undo earlier work. Scored on the CRM end state
+  (every requested change made, nothing else touched), the answer to each turn, valid tool
+  arguments, and no unrequested emails. All records are synthetic.
+scorer: agent_session
+max_steps: 12
+system: >
+  You are the CRM agent of a revenue platform, working with one sales rep over several
+  messages. Use the tools to look things up and act; always look up ids rather than
+  guessing them. Only make the changes the rep asks for. Keep track of what you have
+  already done in this conversation. Reply to each message with a short answer.
+prompt_template: "{{request}}"
+tools:
+  - type: function
+    function:
+      name: search_accounts
+      description: Find accounts whose name or domain contains the query. Returns [{account_id, name, domain}].
+      parameters:
+        type: object
+        properties: {query: {type: string}}
+        required: [query]
+        additionalProperties: false
+  - type: function
+    function:
+      name: list_accounts
+      description: List accounts with owner and tier, optionally only those owned by an exact owner name.
+      parameters:
+        type: object
+        properties: {owner: {type: string}}
+        additionalProperties: false
+  - type: function
+    function:
+      name: get_account
+      description: Get one account's details.
+      parameters:
+        type: object
+        properties: {account_id: {type: string}}
+        required: [account_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: list_contacts
+      description: List contacts at an account (id, name, title, email, status).
+      parameters:
+        type: object
+        properties: {account_id: {type: string}}
+        required: [account_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: list_deals
+      description: List deals at an account (id, name, amount, stage, close_date, champion_id).
+      parameters:
+        type: object
+        properties: {account_id: {type: string}}
+        required: [account_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: list_tasks
+      description: List tasks at an account.
+      parameters:
+        type: object
+        properties: {account_id: {type: string}}
+        required: [account_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: create_task
+      description: Create a follow-up task. Returns the task with its task_id.
+      parameters:
+        type: object
+        properties:
+          account_id: {type: string}
+          title: {type: string}
+          due_date: {type: string, description: "YYYY-MM-DD"}
+          deal_id: {type: string}
+          contact_id: {type: string}
+        required: [account_id, title, due_date]
+        additionalProperties: false
+  - type: function
+    function:
+      name: update_task
+      description: Change a task's title, due date or status.
+      parameters:
+        type: object
+        properties:
+          task_id: {type: string}
+          title: {type: string}
+          due_date: {type: string}
+          status: {type: string, enum: [open, done, cancelled]}
+        required: [task_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: update_deal
+      description: Change a deal's stage, amount (USD), close date or champion contact.
+      parameters:
+        type: object
+        properties:
+          deal_id: {type: string}
+          stage: {type: string, enum: [discovery, proposal, negotiation, closed_won, closed_lost]}
+          amount: {type: number}
+          close_date: {type: string, description: "YYYY-MM-DD"}
+          champion_id: {type: string}
+        required: [deal_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: update_contact
+      description: Change a contact's title, email or status.
+      parameters:
+        type: object
+        properties:
+          contact_id: {type: string}
+          title: {type: string}
+          email: {type: string}
+          status: {type: string, enum: [active, left_company]}
+        required: [contact_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: update_account
+      description: Change an account's owner or tier.
+      parameters:
+        type: object
+        properties:
+          account_id: {type: string}
+          owner: {type: string}
+          tier: {type: string, enum: [smb, mid-market, enterprise]}
+        required: [account_id]
+        additionalProperties: false
+  - type: function
+    function:
+      name: send_email
+      description: Send an email from the rep's mailbox.
+      parameters:
+        type: object
+        properties: {to: {type: string}, subject: {type: string}, body: {type: string}}
+        required: [to, subject, body]
+        additionalProperties: false
+tasks:
+  - id: c9-001-pipeline-hygiene-session
+    tags: [hard, multi-turn, stateful, back-reference]
+    inputs:
+      request: Today is 2026-09-27. Which of Harbor Health's open deals are past their close date? I mean Harbor Health itself, not Harbor Health Partners.
+      followups:
+        - "Push each of those to a close date of 2026-10-31, except the one in negotiation: mark that one closed_lost instead."
+        - "For the deal you just closed lost, create a task titled 'Loss review: <deal name>' due 2026-10-03, linked to the deal."
+        - "Dana Okafor just left Harbor Health. Mark her contact as left_company. Then for every deal that is still open where she is the champion, create a task 'Find new champion: <deal name>' due 2026-10-07 linked to that deal."
+        - Summarize everything you changed today as a short list.
+      crm:
+        accounts:
+          - {account_id: acc_hh, name: Harbor Health, domain: harborhealth.com, owner: Priya Nair, tier: enterprise}
+          - {account_id: acc_hhp, name: Harbor Health Partners, domain: hhpartners.com, owner: Sam Ortiz, tier: mid-market}
+        contacts:
+          - {contact_id: c_1, account_id: acc_hh, name: Dana Okafor, title: VP Operations, email: dokafor@harborhealth.com, status: active}
+          - {contact_id: c_2, account_id: acc_hh, name: Leo Brandt, title: Director of IT, email: lbrandt@harborhealth.com, status: active}
+          - {contact_id: c_3, account_id: acc_hh, name: Mina Sato, title: CFO, email: msato@harborhealth.com, status: active}
+          - {contact_id: c_9, account_id: acc_hhp, name: Dana Okafor, title: Office Manager, email: dana@hhpartners.com, status: active}
+        deals:
+          - {deal_id: d_101, account_id: acc_hh, name: HH Platform Expansion, amount: 120000, stage: negotiation, close_date: "2026-09-15", champion_id: c_1}
+          - {deal_id: d_102, account_id: acc_hh, name: HH Analytics Add-on, amount: 45000, stage: proposal, close_date: "2026-09-20", champion_id: c_1}
+          - {deal_id: d_103, account_id: acc_hh, name: HH Pilot West, amount: 18000, stage: discovery, close_date: "2026-09-01", champion_id: c_2}
+          - {deal_id: d_104, account_id: acc_hh, name: HH Renewal 2027, amount: 210000, stage: proposal, close_date: "2026-12-15", champion_id: c_1}
+          - {deal_id: d_105, account_id: acc_hh, name: HH Services, amount: 30000, stage: closed_won, close_date: "2026-08-30", champion_id: c_3}
+          - {deal_id: d_201, account_id: acc_hhp, name: HHP Onboarding, amount: 60000, stage: proposal, close_date: "2026-09-10", champion_id: c_9}
+    expected:
+      forbidden_tools: [send_email]
+      state:
+        - {table: deals, where: {deal_id: d_101}, equals: {stage: closed_lost}}
+        - {table: deals, where: {deal_id: d_102}, equals: {stage: proposal, close_date: "2026-10-31"}}
+        - {table: deals, where: {deal_id: d_103}, equals: {stage: discovery, close_date: "2026-10-31"}}
+        - {table: contacts, where: {contact_id: c_1}, equals: {status: left_company}}
+        - {table: tasks, contains: {title: loss review}, count: 1, equals: {deal_id: d_101, account_id: acc_hh, due_date: "2026-10-03"}}
+        - {table: tasks, contains: {title: find new champion}, count: 2}
+        - {table: tasks, where: {deal_id: d_102}, contains: {title: find new champion}, count: 1, equals: {due_date: "2026-10-07"}}
+        - {table: tasks, where: {deal_id: d_104}, contains: {title: find new champion}, count: 1, equals: {due_date: "2026-10-07"}}
+      turn_mentions:
+        - [["Platform Expansion", "d_101"], ["Analytics Add-on", "d_102"], ["Pilot West", "d_103"]]
+        - []
+        - []
+        - [["Renewal 2027", "d_104"]]
+        - [["closed_lost", "closed lost", "closed-lost"], ["2026-10-31", "October 31", "Oct 31", "10/31"], ["loss review", "loss-review"], ["champion"], ["Dana"]]
+    reference_output:
+      turns:
+        - steps:
+            - {tool: search_accounts, arguments: {query: Harbor Health}}
+            - {tool: list_deals, arguments: {account_id: acc_hh}}
+          final: "Past close date: HH Platform Expansion (d_101, negotiation), HH Analytics Add-on (d_102) and HH Pilot West (d_103)."
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_101, stage: closed_lost}}
+            - {tool: update_deal, arguments: {deal_id: d_102, close_date: "2026-10-31"}}
+            - {tool: update_deal, arguments: {deal_id: d_103, close_date: "2026-10-31"}}
+          final: Done. d_101 is closed lost; d_102 and d_103 now close 2026-10-31.
+        - steps:
+            - {tool: create_task, arguments: {account_id: acc_hh, title: "Loss review: HH Platform Expansion", due_date: "2026-10-03", deal_id: d_101}}
+          final: Created the loss review task.
+        - steps:
+            - {tool: update_contact, arguments: {contact_id: c_1, status: left_company}}
+            - {tool: create_task, arguments: {account_id: acc_hh, title: "Find new champion: HH Analytics Add-on", due_date: "2026-10-07", deal_id: d_102}}
+            - {tool: create_task, arguments: {account_id: acc_hh, title: "Find new champion: HH Renewal 2027", due_date: "2026-10-07", deal_id: d_104}}
+          final: Marked Dana as left and created new-champion tasks for HH Analytics Add-on and HH Renewal 2027 (d_104).
+        - steps: []
+          final: "- d_101 moved to closed lost\n- d_102, d_103 pushed to 2026-10-31\n- Loss review task for d_101\n- Dana marked left_company\n- Find new champion tasks for d_102 and d_104"
+
+  - id: c9-002-territory-handoff-with-undo
+    tags: [hard, multi-turn, stateful, undo, lookalike-owner]
+    inputs:
+      request: Sam Ortiz is leaving at the end of the month. Which accounts does he own, and what tier is each?
+      followups:
+        - Reassign the mid-market ones to Jordan Blake and the enterprise ones to Priya Nair.
+        - For each account you just reassigned that has an open deal closing before 2026-11-01, create a task titled 'Intro call with new owner' due 2026-10-05 on that account.
+        - Actually, Tidepool stays with Sam through its renewal. Undo everything you did for Tidepool.
+        - How many accounts does Jordan Blake own now, and which ones?
+      crm:
+        accounts:
+          - {account_id: acc_tp, name: Tidepool, domain: tidepool.io, owner: Sam Ortiz, tier: mid-market}
+          - {account_id: acc_fv, name: Ferrovane, domain: ferrovane.com, owner: Sam Ortiz, tier: enterprise}
+          - {account_id: acc_qm, name: Quillmesh, domain: quillmesh.ai, owner: Sam Ortiz, tier: mid-market}
+          - {account_id: acc_bk, name: Brightkeel Logistics, domain: brightkeel.com, owner: Sam Ortiz, tier: enterprise}
+          - {account_id: acc_ks, name: Kestrel Logistics, domain: kestrel-log.com, owner: Sam Ortega, tier: mid-market}
+          - {account_id: acc_lg, name: Lumen Grid, domain: lumengrid.com, owner: Jordan Blake, tier: smb}
+        deals:
+          - {deal_id: d_301, account_id: acc_tp, name: Tidepool Renewal, amount: 52000, stage: proposal, close_date: "2026-10-20"}
+          - {deal_id: d_302, account_id: acc_fv, name: Ferrovane Expansion, amount: 140000, stage: negotiation, close_date: "2026-11-15"}
+          - {deal_id: d_303, account_id: acc_fv, name: Ferrovane Services, amount: 20000, stage: closed_won, close_date: "2026-10-10"}
+          - {deal_id: d_304, account_id: acc_qm, name: Quillmesh Pilot, amount: 15000, stage: discovery, close_date: "2026-10-28"}
+          - {deal_id: d_305, account_id: acc_bk, name: Brightkeel Platform, amount: 88000, stage: proposal, close_date: "2026-10-05"}
+          - {deal_id: d_306, account_id: acc_bk, name: Brightkeel EU, amount: 40000, stage: closed_lost, close_date: "2026-10-15"}
+          - {deal_id: d_307, account_id: acc_ks, name: Kestrel Fleet, amount: 30000, stage: proposal, close_date: "2026-10-12"}
+    expected:
+      forbidden_tools: [send_email]
+      state:
+        - {table: accounts, where: {account_id: acc_tp}, equals: {owner: Sam Ortiz}}
+        - {table: accounts, where: {account_id: acc_qm}, equals: {owner: Jordan Blake}}
+        - {table: accounts, where: {account_id: acc_fv}, equals: {owner: Priya Nair}}
+        - {table: accounts, where: {account_id: acc_bk}, equals: {owner: Priya Nair}}
+        - {table: tasks, where: {account_id: acc_qm}, contains: {title: intro call}, count: 1, equals: {due_date: "2026-10-05", status: open}}
+        - {table: tasks, where: {account_id: acc_bk}, contains: {title: intro call}, count: 1, equals: {due_date: "2026-10-05", status: open}}
+        - {table: tasks, where: {account_id: acc_fv}, count: 0}
+        - {table: tasks, where: {account_id: acc_tp, status: open}, count: 0}
+      allow:
+        - {table: tasks, where: {account_id: acc_tp}}
+      turn_mentions:
+        - [["Tidepool"], ["Ferrovane"], ["Quillmesh"], ["Brightkeel"]]
+        - []
+        - [["Quillmesh"], ["Brightkeel"]]
+        - [["Tidepool"]]
+        - [["2", "two"], ["Quillmesh"], ["Lumen Grid"]]
+    reference_output:
+      turns:
+        - steps:
+            - {tool: list_accounts, arguments: {owner: Sam Ortiz}}
+          final: "Sam owns Tidepool (mid-market), Ferrovane (enterprise), Quillmesh (mid-market) and Brightkeel Logistics (enterprise)."
+        - steps:
+            - {tool: update_account, arguments: {account_id: acc_tp, owner: Jordan Blake}}
+            - {tool: update_account, arguments: {account_id: acc_qm, owner: Jordan Blake}}
+            - {tool: update_account, arguments: {account_id: acc_fv, owner: Priya Nair}}
+            - {tool: update_account, arguments: {account_id: acc_bk, owner: Priya Nair}}
+          final: Reassigned.
+        - steps:
+            - {tool: list_deals, arguments: {account_id: acc_tp}}
+            - {tool: list_deals, arguments: {account_id: acc_fv}}
+            - {tool: list_deals, arguments: {account_id: acc_qm}}
+            - {tool: list_deals, arguments: {account_id: acc_bk}}
+            - {tool: create_task, arguments: {account_id: acc_tp, title: Intro call with new owner, due_date: "2026-10-05"}}
+            - {tool: create_task, arguments: {account_id: acc_qm, title: Intro call with new owner, due_date: "2026-10-05"}}
+            - {tool: create_task, arguments: {account_id: acc_bk, title: Intro call with new owner, due_date: "2026-10-05"}}
+          final: Created intro-call tasks for Tidepool, Quillmesh and Brightkeel. Ferrovane's only open deal closes 2026-11-15.
+        - steps:
+            - {tool: update_account, arguments: {account_id: acc_tp, owner: Sam Ortiz}}
+            - {tool: update_task, arguments: {task_id: t_001, status: cancelled}}
+          final: Tidepool is back with Sam and its intro-call task is cancelled.
+        - steps:
+            - {tool: list_accounts, arguments: {owner: Jordan Blake}}
+          final: Jordan owns 2 accounts now, Lumen Grid and Quillmesh.
+
+  - id: c9-003-bounce-cleanup-with-corrections
+    tags: [hard, multi-turn, stateful, correction, case-insensitive]
+    inputs:
+      request: "These Ferrovane addresses hard-bounced: J.Ruiz@ferrovane.com, a.keller@ferrovane.com, t.novak@ferrovane.com, p.moreau@ferrovane.com. Mark the matching contacts as left_company and tell me if any address doesn't match a contact."
+      followups:
+        - Which open deals now have a champion who has left?
+        - For each of those, make Grace Lin the champion and create a task titled 'Brief Grace on <deal name>' due 2026-10-02 linked to the deal.
+        - "Correction: Javier's bounce was a mail-server glitch, set him back to active. And Anna Keller didn't leave, she moved roles: she's now Chief Financial Officer with the new email anna.keller@ferrovane.com."
+        - Since Anna is still here, put her back as champion on the deal she championed before, keep Grace on the other one, and cancel the briefing task that's no longer needed.
+      crm:
+        accounts:
+          - {account_id: acc_fv, name: Ferrovane, domain: ferrovane.com, owner: Priya Nair, tier: enterprise}
+        contacts:
+          - {contact_id: c_1, account_id: acc_fv, name: Javier Ruiz, title: Head of Procurement, email: j.ruiz@ferrovane.com, status: active}
+          - {contact_id: c_2, account_id: acc_fv, name: Anna Keller, title: VP Finance, email: a.keller@ferrovane.com, status: active}
+          - {contact_id: c_3, account_id: acc_fv, name: Tomas Novak, title: IT Director, email: t.novak@ferrovane.com, status: active}
+          - {contact_id: c_4, account_id: acc_fv, name: Grace Lin, title: COO, email: g.lin@ferrovane.com, status: active}
+          - {contact_id: c_5, account_id: acc_fv, name: Omar Haddad, title: Operations Manager, email: o.haddad@ferrovane.com, status: active}
+        deals:
+          - {deal_id: d_1, account_id: acc_fv, name: Ferrovane Core, amount: 90000, stage: negotiation, close_date: "2026-11-20", champion_id: c_2}
+          - {deal_id: d_2, account_id: acc_fv, name: Ferrovane Data Add-on, amount: 40000, stage: proposal, close_date: "2026-12-05", champion_id: c_3}
+          - {deal_id: d_3, account_id: acc_fv, name: Ferrovane EU Rollout, amount: 150000, stage: discovery, close_date: "2027-02-01", champion_id: c_5}
+          - {deal_id: d_4, account_id: acc_fv, name: Ferrovane 2025 Pilot, amount: 12000, stage: closed_won, close_date: "2025-11-01", champion_id: c_3}
+    expected:
+      forbidden_tools: [send_email]
+      state:
+        - {table: contacts, where: {contact_id: c_1}, equals: {status: active}}
+        - {table: contacts, where: {contact_id: c_2}, equals: {status: active, title: Chief Financial Officer, email: anna.keller@ferrovane.com}}
+        - {table: contacts, where: {contact_id: c_3}, equals: {status: left_company}}
+        - {table: deals, where: {deal_id: d_1}, equals: {champion_id: c_2}}
+        - {table: deals, where: {deal_id: d_2}, equals: {champion_id: c_4}}
+        - {table: tasks, where: {deal_id: d_2}, contains: {title: brief grace}, count: 1, equals: {status: open, due_date: "2026-10-02"}}
+        - {table: tasks, where: {deal_id: d_1, status: open}, count: 0}
+      allow:
+        - {table: tasks, where: {deal_id: d_1}}
+      turn_mentions:
+        - [["p.moreau"]]
+        - [["Ferrovane Core", "d_1"], ["Data Add-on", "d_2"]]
+        - []
+        - []
+        - [["cancel"]]
+    reference_output:
+      turns:
+        - steps:
+            - {tool: search_accounts, arguments: {query: Ferrovane}}
+            - {tool: list_contacts, arguments: {account_id: acc_fv}}
+            - {tool: update_contact, arguments: {contact_id: c_1, status: left_company}}
+            - {tool: update_contact, arguments: {contact_id: c_2, status: left_company}}
+            - {tool: update_contact, arguments: {contact_id: c_3, status: left_company}}
+          final: Marked Javier Ruiz, Anna Keller and Tomas Novak as left. p.moreau@ferrovane.com doesn't match any contact.
+        - steps:
+            - {tool: list_deals, arguments: {account_id: acc_fv}}
+          final: Ferrovane Core (champion Anna Keller) and Ferrovane Data Add-on (champion Tomas Novak).
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_1, champion_id: c_4}}
+            - {tool: update_deal, arguments: {deal_id: d_2, champion_id: c_4}}
+            - {tool: create_task, arguments: {account_id: acc_fv, title: "Brief Grace on Ferrovane Core", due_date: "2026-10-02", deal_id: d_1}}
+            - {tool: create_task, arguments: {account_id: acc_fv, title: "Brief Grace on Ferrovane Data Add-on", due_date: "2026-10-02", deal_id: d_2}}
+          final: Grace is champion on both, with briefing tasks created.
+        - steps:
+            - {tool: update_contact, arguments: {contact_id: c_1, status: active}}
+            - {tool: update_contact, arguments: {contact_id: c_2, status: active, title: Chief Financial Officer, email: anna.keller@ferrovane.com}}
+          final: Javier is active again and Anna's record is updated.
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_1, champion_id: c_2}}
+            - {tool: update_task, arguments: {task_id: t_001, status: cancelled}}
+          final: Anna is champion on Ferrovane Core again and I cancelled the Core briefing task; Grace stays on the Data Add-on.
+
+  - id: c9-004-renewal-math-session
+    tags: [hard, multi-turn, stateful, arithmetic, business-days]
+    inputs:
+      request: What's the current amount and stage of Quillmesh's renewal deal?
+      followups:
+        - They're adding 15 seats at $1,200 per seat per year. Update the renewal amount to include them and move it to negotiation.
+        - Finance approved a 10% discount on the added seats only. Update the amount again.
+        - Create a task titled 'Send revised order form' due two business days from today, linked to the renewal. Today is Friday 2026-09-25.
+        - What's Quillmesh's total open pipeline now?
+        - After the scoping call, the analytics deal is now at proposal with an amount of $30,000. Update it.
+        - And what's the total open pipeline now?
+      crm:
+        accounts:
+          - {account_id: acc_qm, name: Quillmesh, domain: quillmesh.ai, owner: Sam Ortiz, tier: mid-market}
+          - {account_id: acc_qp, name: Quillpoint, domain: quillpoint.com, owner: Sam Ortiz, tier: smb}
+        deals:
+          - {deal_id: d_1, account_id: acc_qm, name: Quillmesh Renewal FY27, amount: 96000, stage: proposal, close_date: "2026-10-31"}
+          - {deal_id: d_2, account_id: acc_qm, name: Quillmesh Analytics, amount: 24000, stage: discovery, close_date: "2026-11-30"}
+          - {deal_id: d_3, account_id: acc_qm, name: Quillmesh Pilot, amount: 12000, stage: closed_won, close_date: "2026-03-01"}
+          - {deal_id: d_9, account_id: acc_qp, name: Quillpoint Renewal, amount: 8000, stage: proposal, close_date: "2026-10-15"}
+    expected:
+      forbidden_tools: [send_email]
+      state:
+        - {table: deals, where: {deal_id: d_1}, equals: {amount: 112200, stage: negotiation}}
+        - {table: deals, where: {deal_id: d_2}, equals: {amount: 30000, stage: proposal}}
+        - {table: tasks, contains: {title: revised order form}, count: 1, equals: {deal_id: d_1, due_date: "2026-09-29"}}
+      turn_mentions:
+        - [["96,000", "96000", "96k"], ["proposal"]]
+        - [["114,000", "114000", "114k"]]
+        - [["112,200", "112200", "112.2k"]]
+        - [["2026-09-29", "September 29", "Sep 29", "Sept 29", "9/29"]]
+        - [["136,200", "136200", "136.2k"]]
+        - []
+        - [["142,200", "142200", "142.2k"]]
+    reference_output:
+      turns:
+        - steps:
+            - {tool: search_accounts, arguments: {query: Quillmesh}}
+            - {tool: list_deals, arguments: {account_id: acc_qm}}
+          final: Quillmesh Renewal FY27 is $96,000 at proposal.
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_1, amount: 114000, stage: negotiation}}
+          final: Updated to $114,000 and moved to negotiation.
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_1, amount: 112200}}
+          final: Updated to $112,200 ($96,000 + 15 x $1,080).
+        - steps:
+            - {tool: create_task, arguments: {account_id: acc_qm, title: Send revised order form, due_date: "2026-09-29", deal_id: d_1}}
+          final: Task created, due 2026-09-29.
+        - steps: []
+          final: Open pipeline is $136,200 ($112,200 renewal + $24,000 analytics).
+        - steps:
+            - {tool: update_deal, arguments: {deal_id: d_2, stage: proposal, amount: 30000}}
+          final: Updated the analytics deal.
+        - steps: []
+          final: Open pipeline is now $142,200.

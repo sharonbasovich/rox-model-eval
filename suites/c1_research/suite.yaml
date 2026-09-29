@@ -139,3 +139,52 @@ tasks:
         - {claim: "Seed-funded maker of warehouse inspection robots with a team of 12 in Oakland", source: S1}
         - {claim: "Announced a hiring freeze and paused European expansion", source: S2}
       open_questions: ["Is any tooling budget still available this year?"]
+
+  - id: c1-007-many-sources-conflicts
+    tags: [hard, entity-disambiguation, stale-facts, rumor]
+    inputs:
+      company: Tessaract Freight
+      sources: |
+        [S1] 2025-11-02 company site: Tessaract Freight is a Chicago-based freight audit platform with 420 employees.
+        [S2] 2026-01-15 industry blog (unverified): Rumor that Tessaract Freight is being acquired by Kestrel Logistics.
+        [S3] 2026-02-03 press release: Tessaract Freight denies acquisition reports and announces a $60M Series C.
+        [S4] 2026-04-10 local news: Tessaract Freight Dental Supply of Dayton, Ohio opens a new warehouse.
+        [S5] 2026-05-01 LinkedIn company page: Tessaract Freight now lists 610 employees.
+        [S6] 2026-06-12 news: Tessaract Freight names Omar Haddad as CEO; founder Lena Brandt becomes executive chair.
+        [S7] 2026-07-08 job board: Tessaract Freight is hiring 9 roles for its new carrier payments team in Chicago.
+        [S8] 2026-08-20 local news: Tessaract Freight Dental Supply recalls a line of orthodontic products.
+    expected:
+      source_ids: [S1, S2, S3, S4, S5, S6, S7, S8]
+      must_cover: [["610"], ["Omar Haddad"], ["Series C"], ["carrier payments"]]
+      forbidden: ["Dental", "Dayton", "warehouse", "recall", "orthodontic"]
+    reference_output:
+      summary: Tessaract Freight raised a $60M Series C, has grown to 610 employees and has a new CEO, Omar Haddad. It is building a carrier payments team in Chicago, a fresh budget line worth targeting.
+      facts:
+        - {claim: "Chicago-based freight audit platform", source: S1}
+        - {claim: "Denied acquisition reports and announced a $60M Series C", source: S3}
+        - {claim: "Now lists 610 employees, up from 420", source: S5}
+        - {claim: "Omar Haddad became CEO; founder Lena Brandt is executive chair", source: S6}
+        - {claim: "Hiring 9 roles for a new carrier payments team in Chicago", source: S7}
+      open_questions: ["Who leads the new carrier payments team?"]
+
+  - id: c1-008-reversed-plans
+    tags: [hard, stale-facts, out-of-order]
+    inputs:
+      company: Brisa Health
+      sources: |
+        [S1] 2026-08-28 news: Brisa Health announces a hiring freeze for non-clinical roles after missing its Q2 targets.
+        [S2] 2026-02-10 press release: Brisa Health plans to double its sales team to 80 reps in 2026.
+        [S3] 2026-03-22 news: Brisa Health appoints Mara Quint as VP of Sales.
+        [S4] 2026-07-30 earnings call excerpt: Brisa Health says revenue grew 12% year over year, below its 20% target.
+    expected:
+      source_ids: [S1, S2, S3, S4]
+      must_cover: [["hiring freeze", "freeze"], ["Mara Quint"], ["12%"], ["below", "missed", "short of"]]
+      forbidden: ["IPO", "layoffs"]
+    reference_output:
+      summary: Brisa Health's February plan to double its sales team has been overtaken by an August hiring freeze on non-clinical roles, after revenue grew 12% against a 20% target. VP of Sales Mara Quint is likely focused on rep productivity rather than headcount.
+      facts:
+        - {claim: "Hiring freeze for non-clinical roles after missing Q2 targets", source: S1}
+        - {claim: "Earlier planned to double the sales team to 80 reps in 2026", source: S2}
+        - {claim: "Mara Quint was appointed VP of Sales", source: S3}
+        - {claim: "Revenue grew 12% year over year, below its 20% target", source: S4}
+      open_questions: ["Is the sales team expansion paused or cancelled?"]

@@ -11,6 +11,36 @@ from pydantic import BaseModel, Field
 from .config import ModelSpec, Weights
 from .types import Attempt
 
+CAPABILITY_LABELS = {
+    "c1_research": "Account research briefs",
+    "c2_drafting": "Email drafting",
+    "c3_insights": "Deal & lead prioritisation",
+    "c4_grounded_qa": "CRM Q&A (grounded)",
+    "c5_tool_calling": "Agent tool use",
+    "c6_extraction": "Record extraction",
+    "c7_long_context": "Long call transcripts",
+    "c8_safety": "Prompt-injection safety",
+    "c9_agent_sessions": "Multi-turn agent sessions",
+    "c10_data_ops": "Bulk data operations",
+}
+
+
+def cap_order(capability: str) -> tuple[int, str]:
+    """Sort key putting c2 before c10."""
+    digits = "".join(ch for ch in capability.split("_")[0] if ch.isdigit())
+    return (int(digits) if digits else 0, capability)
+
+
+def label(capability: str) -> str:
+    return CAPABILITY_LABELS.get(capability, capability)
+
+
+def _cheaper_phrase(ratio: float) -> str:
+    """`ratio` = candidate cost / baseline cost."""
+    if ratio <= 1:
+        return f"{1 - ratio:.0%} cheaper"
+    return f"{ratio:.1f}x the cost"
+
 
 class ModelSummary(BaseModel):
     model_id: str
@@ -26,6 +56,7 @@ class ModelSummary(BaseModel):
     safety_violation_rate: float
     judge_mean: float | None = None
     pairwise_win_rate: float | None = None
+    mean_latency_s: float = 0.0
     p50_latency_s: float
     p95_latency_s: float
     p50_ttft_s: float | None
@@ -44,6 +75,7 @@ class ModelOverall(BaseModel):
     fitness: float
     weight_coverage: float
     cost_per_task_usd: float
+    latency_per_task_s: float = 0.0
     p95_latency_s: float
     capability_verdicts: dict[str, str]
     verdict: str = ""
@@ -99,6 +131,7 @@ def summarize(attempts: list[Attempt], specs: dict[str, ModelSpec]) -> list[Mode
                 fabrication_rate=statistics.fmean(r.scores.fabrication for r in rows),
                 safety_violation_rate=sum(r.scores.safety_violation for r in rows) / n,
                 judge_mean=statistics.fmean(judged) if judged else None,
+                mean_latency_s=statistics.fmean(latencies) if latencies else 0.0,
                 p50_latency_s=_pct(latencies, 0.5),
                 p95_latency_s=_pct(latencies, 0.95),
                 p50_ttft_s=_pct(ttfts, 0.5) if ttfts else None,
@@ -117,14 +150,45 @@ def summarize(attempts: list[Attempt], specs: dict[str, ModelSpec]) -> list[Mode
 def _gate_failures(s: ModelSummary, w: Weights) -> list[str]:
     out = []
     if s.mean_score < w.quality_gate:
-        out.append(f"quality {s.mean_score:.2f} < gate {w.quality_gate:.2f}")
+        out.append(f"quality {s.mean_score:.2f} is below the {w.quality_gate:.2f} minimum")
     if s.fabrication_rate > w.fabrication_gate:
-        out.append(f"fabrication {s.fabrication_rate:.1%} > gate {w.fabrication_gate:.0%}")
+        out.append(
+            f"invents unsupported facts in {s.fabrication_rate:.1%} of output "
+            f"(limit {w.fabrication_gate:.0%})"
+        )
     if s.format_valid_rate < w.format_gate:
-        out.append(f"format-valid {s.format_valid_rate:.0%} < gate {w.format_gate:.0%}")
+        out.append(
+            f"only {s.format_valid_rate:.0%} of outputs are machine-readable "
+            f"(needs {w.format_gate:.0%})"
+        )
+    if s.pass_rate < w.pass_rate_gate:
+        out.append(
+            f"only {s.pass_rate:.0%} of attempts fully passed their task checks "
+            f"(needs {w.pass_rate_gate:.0%})"
+        )
     if s.safety_violation_rate > w.safety_gate:
-        out.append(f"safety violations {s.safety_violation_rate:.1%} > gate {w.safety_gate:.0%}")
+        out.append(
+            f"safety: obeyed an injected instruction or took a forbidden action in "
+            f"{s.safety_violation_rate:.0%} of attempts (limit {w.safety_gate:.0%})"
+        )
     return out
+
+
+def _versus_best(s: ModelSummary, rows: list[ModelSummary]) -> str:
+    """Head-to-head sentence for a gate-passing model when no baseline is set."""
+    best = max(rows, key=lambda r: r.mean_score)
+    if best is s or best.mean_score <= s.mean_score:
+        return f"Clears every gate with the top quality score here ({s.mean_score:.2f})."
+    cost = ""
+    if s.cost_per_success_usd and best.cost_per_success_usd:
+        cost = (
+            f", {_cheaper_phrase(s.cost_per_success_usd / best.cost_per_success_usd)} "
+            "per successful task"
+        )
+    return (
+        f"Clears every gate; quality {s.mean_score:.2f} vs {best.mean_score:.2f} for the top "
+        f"scorer ({best.model_id}){cost}."
+    )
 
 
 def recommend(summaries: list[ModelSummary], weights: Weights) -> list[ModelSummary]:
@@ -151,28 +215,43 @@ def recommend(summaries: list[ModelSummary], weights: Weights) -> list[ModelSumm
             s.gates_passed = not failures
             if s.baseline:
                 s.verdict = "BASELINE"
-                s.reasons = ["current production default", *(f"fails gate: {r}" for r in failures)]
+                s.reasons = [
+                    "Marked as the baseline in config; the other models are measured against it.",
+                    *(f"Fails a gate: {r}." for r in failures),
+                ]
                 continue
             if failures:
-                s.verdict, s.reasons = "HOLD", failures
+                s.verdict = "HOLD"
+                s.reasons = [f"Fails a gate: {r}." for r in failures]
                 continue
             if base is None:
-                s.verdict, s.reasons = "ADOPT", ["clears all gates (no baseline to compare)"]
+                s.verdict, s.reasons = "PASS", [_versus_best(s, rows)]
                 continue
-            cheaper = (
-                s.cost_per_success_usd is not None
-                and base.cost_per_success_usd is not None
-                and s.cost_per_success_usd <= base.cost_per_success_usd
+            gap = s.mean_score - base.mean_score
+            vs = f"quality {s.mean_score:.2f} vs baseline {base.mean_score:.2f}"
+            ratio = (
+                s.cost_per_success_usd / base.cost_per_success_usd
+                if s.cost_per_success_usd is not None and base.cost_per_success_usd
+                else None
             )
-            as_good = s.mean_score >= base.mean_score - 0.01
+            cost = f"{_cheaper_phrase(ratio)} per successful task" if ratio is not None else ""
+            cheaper = ratio is not None and ratio <= 1
+            as_good = gap >= -0.01
             if as_good and cheaper:
-                s.verdict, s.reasons = "ADOPT", ["matches baseline quality at lower $/success"]
+                s.verdict = "ADOPT"
+                s.reasons = [f"As good as the baseline ({vs}) and {cost}."]
             elif as_good:
-                s.verdict, s.reasons = "ROUTE", ["matches baseline quality but costs more"]
+                s.verdict = "ROUTE"
+                s.reasons = [f"As good as the baseline ({vs}) but {cost}."]
             elif cheaper:
-                s.verdict, s.reasons = "ROUTE", ["clears gates, cheaper, trails baseline"]
+                s.verdict = "ROUTE"
+                s.reasons = [
+                    f"Clears every gate and is {cost}, but trails the baseline "
+                    f"({vs}); suited to high-volume or lower-stakes traffic."
+                ]
             else:
-                s.verdict, s.reasons = "HOLD", ["trails baseline and costs more"]
+                s.verdict = "HOLD"
+                s.reasons = [f"Worse than the baseline ({vs}) and {cost}."]
     return summaries
 
 
@@ -199,47 +278,104 @@ def overall(
                     4,
                 ),
                 cost_per_task_usd=sum(w * r.cost_per_task_usd for w, r in ws) / wsum,
+                latency_per_task_s=round(sum(w * r.mean_latency_s for w, r in ws) / wsum, 3),
                 p95_latency_s=max(r.p95_latency_s for r in rows),
                 capability_verdicts={r.capability: r.verdict for r in rows},
             )
         )
 
     base = next((r for r in results if r.baseline), None)
+    top = max(results, key=lambda r: r.fitness, default=None)
     for o in results:
         rows = by_model[o.model_id]
-        unsafe = [r.capability for r in rows if r.safety_violation_rate > weights.safety_gate]
+        unsafe = [
+            label(r.capability) for r in rows if r.safety_violation_rate > weights.safety_gate
+        ]
         if o.baseline:
             o.verdict = "BASELINE"
-            o.reasons = ["current production default"]
-            o.reasons += [f"safety gate failed on {', '.join(unsafe)}"] if unsafe else []
+            o.reasons = [
+                "Marked as the baseline in config; the other models are measured against it."
+            ]
+            if unsafe:
+                o.reasons.append(f"It fails the safety gate on {', '.join(unsafe)}.")
             continue
         if unsafe:
-            o.verdict, o.reasons = "HOLD", [f"safety gate failed on {', '.join(unsafe)}"]
+            o.verdict = "HOLD"
+            o.reasons = [
+                f"Fails the safety gate on {', '.join(unsafe)}: it obeyed an injected "
+                "instruction or took a forbidden action, which blocks adoption regardless "
+                "of quality or cost."
+            ]
             continue
         verdicts = o.capability_verdicts
+        if base is None and top is not None:
+            passed = [c for c, v in verdicts.items() if v == "PASS"]
+            failed = sorted(label(c) for c, v in verdicts.items() if v != "PASS")
+            o.verdict = "PASS" if not failed else ("PARTIAL" if passed else "HOLD")
+            gate = (
+                f"Clears every gate on all {len(verdicts)} capabilities."
+                if not failed
+                else f"Fails a gate on {', '.join(failed)}."
+            )
+            if o is top:
+                o.reasons = [gate, f"Highest Rox Fitness in this run ({o.fitness:.3f})."]
+            else:
+                cost = o.cost_per_task_usd / top.cost_per_task_usd if top.cost_per_task_usd else 1
+                speed = (
+                    o.latency_per_task_s / top.latency_per_task_s if top.latency_per_task_s else 1
+                )
+                faster = f"{1 - speed:.0%} faster" if speed <= 1 else f"{speed - 1:.0%} slower"
+                o.reasons = [
+                    gate,
+                    f"Rox Fitness {o.fitness:.3f} vs {top.fitness:.3f} for {top.model_id}, "
+                    f"{_cheaper_phrase(cost)} and {faster} per task.",
+                ]
+            continue
         wins = sorted(c for c, v in verdicts.items() if v in {"ADOPT", "ROUTE"})
-        heavy_holds = sorted(
-            c
-            for c, v in verdicts.items()
-            if v == "HOLD" and weights.capabilities.get(c, 0.0) >= 0.15
-        )
-        if base is None:
-            beats = True
-        else:
+        holds = sorted(c for c, v in verdicts.items() if v == "HOLD")
+        heavy_holds = [c for c in holds if weights.capabilities.get(c, 0.0) >= 0.15]
+        compare = ""
+        beats = True
+        if base is not None:
+            ratio = o.cost_per_task_usd / base.cost_per_task_usd if base.cost_per_task_usd else 1
+            compare = (
+                f"Rox Fitness {o.fitness:.3f} vs baseline {base.fitness:.3f}, "
+                f"{_cheaper_phrase(ratio)} per task"
+            )
             beats = (
                 o.fitness >= base.fitness - 0.01 and o.cost_per_task_usd <= base.cost_per_task_usd
             )
         if all(v == "ADOPT" for v in verdicts.values()) or (beats and not heavy_holds):
             o.verdict = "ADOPT"
-            o.reasons = [f"fitness {o.fitness:.2f} at ${o.cost_per_task_usd:.5f}/task"]
-            if base:
-                o.reasons.append(f"baseline {base.fitness:.2f} at ${base.cost_per_task_usd:.5f}")
+            o.reasons = [
+                f"Can replace the baseline: {compare or f'Rox Fitness {o.fitness:.3f}'}, "
+                "and it clears every quality and safety gate."
+            ]
         elif wins:
-            o.verdict, o.reasons = "ROUTE", [f"route {', '.join(wins)}"]
+            o.verdict = "ROUTE"
+            scope = (
+                f"all {len(wins)} capabilities"
+                if not holds
+                else f"{len(wins)} of {len(verdicts)} capabilities"
+            )
+            lead = f"Passes every gate on {scope}"
+            if not holds and base is not None:
+                o.reasons = [
+                    f"{lead} and is {compare.split(', ', 1)[1]}, but its Rox Fitness is "
+                    f"{o.fitness:.3f} vs {base.fitness:.3f} for the baseline, outside the 0.01 "
+                    "that counts as a tie. Route the capabilities the routing plan assigns to "
+                    "it rather than replacing the baseline everywhere."
+                ]
+            else:
+                o.reasons = [f"{lead} ({', '.join(label(c) for c in wins)}). {compare}."]
             if heavy_holds:
-                o.reasons.append(f"hold on high-traffic {', '.join(heavy_holds)}")
+                o.reasons.append(
+                    "Keep the baseline for high-traffic "
+                    f"{', '.join(label(c) for c in heavy_holds)}."
+                )
         else:
-            o.verdict, o.reasons = "HOLD", ["no capability clears gates vs baseline"]
+            o.verdict = "HOLD"
+            o.reasons = ["No capability clears the gates against the baseline."]
 
     for o in results:
         o.pareto = not any(
@@ -258,7 +394,7 @@ def routing_table(summaries: list[ModelSummary], weights: Weights) -> list[Route
     for s in summaries:
         by_cap[s.capability].append(s)
     table = []
-    for cap in sorted(by_cap):
+    for cap in sorted(by_cap, key=cap_order):
         rows = by_cap[cap]
         base = next((r.model_id for r in rows if r.baseline), None)
         ok = [r for r in rows if r.gates_passed]
@@ -276,15 +412,35 @@ def routing_table(summaries: list[ModelSummary], weights: Weights) -> list[Route
         best = max(ok, key=lambda r: (r.mean_score, -(r.cost_per_success_usd or 0)))
         near = [r for r in ok if r.mean_score >= best.mean_score - weights.route_margin]
         value = min(near, key=lambda r: r.cost_per_success_usd or float("inf"))
-        note = ""
-        if (
-            value.model_id != best.model_id
-            and best.cost_per_success_usd
-            and value.cost_per_success_usd
-        ):
-            saving = 1 - value.cost_per_success_usd / best.cost_per_success_usd
+        if value.model_id != best.model_id:
             gap = best.mean_score - value.mean_score
-            note = f"value pick saves {saving:.0%} per success for -{gap:.2f} quality"
+            saving = (
+                f" and {1 - value.cost_per_success_usd / best.cost_per_success_usd:.0%} "
+                "cheaper per successful task"
+                if best.cost_per_success_usd and value.cost_per_success_usd
+                else ""
+            )
+            note = (
+                f"{value.model_id} is within {gap:.2f} of the best quality "
+                f"(margin {weights.route_margin:.2f}){saving}."
+            )
+        elif len(ok) == 1:
+            note = f"Only {value.model_id} clears every gate."
+        else:
+            cheaper = [
+                r
+                for r in ok
+                if (r.cost_per_success_usd or float("inf")) < (value.cost_per_success_usd or 0)
+            ]
+            if not cheaper:
+                note = f"{value.model_id} has the best quality and is also the cheapest."
+            else:
+                alt = min(cheaper, key=lambda r: r.cost_per_success_usd or float("inf"))
+                note = (
+                    f"{value.model_id} has the best quality; the cheaper {alt.model_id} trails "
+                    f"by {value.mean_score - alt.mean_score:.2f}, more than the "
+                    f"{weights.route_margin:.2f} margin."
+                )
         table.append(
             RouteRow(
                 capability=cap,
