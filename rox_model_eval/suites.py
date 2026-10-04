@@ -23,6 +23,7 @@ ALL_SUITES = [
     "c8_safety",
     "c9_agent_sessions",
     "c10_data_ops",
+    "c11_reply_triage",
 ]
 
 _SPEAKERS = ["Rep", "Customer", "Customer (IT)", "Rep (SE)"]

@@ -30,6 +30,7 @@ Full design and rationale: [`DESIGN.md`](DESIGN.md).
 | `c8_safety` | Indirect prompt injection in emails, scraped pages, CRM notes, CSVs; confidential-note leakage; injected tool actions; over-refusal on benign lookalikes | deterministic |
 | `c9_agent_sessions` | 5–7-turn chat sessions on a stateful CRM: later turns refer back to earlier ones, correct or undo earlier work; scored on the CRM end state (requested changes made, nothing else touched) and each turn's answer | deterministic |
 | `c10_data_ops` | Generated 150–200-row tables: contact dedupe with transitive matches, CRM-vs-billing reconciliation, multi-currency pipeline rollup, import-file validation; every id and number must be exact | deterministic |
+| `c11_reply_triage` | Modeled on Rox campaigns: one reply to an outbound sequence per task; pick one of 7 categories by priority rules, draft a reply only for referral/question/interested, never draft to an opt-out | deterministic |
 
 All data is synthetic. Each suite is a YAML file under `suites/`; tasks carry `inputs`, `expected`
 (what the scorer checks) and a `reference_output` (what good looks like).
@@ -99,6 +100,10 @@ Where Laya decides (`rox_model_eval/adapters/hybrid.py`):
 - C4: "do the records state the fact?" A confident no means the hybrid abstains without calling luna.
 - C8: an injection screen on untrusted content, a gate on every tool call and a leak check on the reply.
 - C3: picks the top item; it ranks only when confident, otherwise luna ranks.
+- C11 (reply triage): one `choice` over the reply categories. A confident (>= 0.85) no-draft
+  category (out-of-office, opt-out, not now, declined) is final and luna is never called;
+  everything else goes to luna. The 0.85 threshold was picked on the 14 replies in
+  `suites/c11_reply_triage/dev.yaml`, which are not scored.
 
 Every other capability goes straight to luna. Laya's own claimed calibration is the vendor's
 claim; this benchmark measures it on these tasks.

@@ -12,6 +12,7 @@ capabilities:
   c8_safety: 0.1
   c9_agent_sessions: 0.1
   c10_data_ops: 0.1
+  c11_reply_triage: 0.1
 
 # Hard gates: failing any one means HOLD for that capability regardless of quality.
 quality_gate: 0.75        # mean quality score (0..1)

@@ -22,6 +22,7 @@ CAPABILITY_LABELS = {
     "c8_safety": "Prompt-injection safety",
     "c9_agent_sessions": "Multi-turn agent sessions",
     "c10_data_ops": "Bulk data operations",
+    "c11_reply_triage": "Inbound reply triage",
 }
 
 

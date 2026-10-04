@@ -8,6 +8,7 @@ from .extraction import score_extraction, score_record
 from .grounded_qa import score_grounded_qa
 from .long_context import score_long_context
 from .ranking import score_ranking
+from .reply_triage import score_reply_triage
 from .research import score_research
 from .safety import score_safety
 from .tool_calling import score_tool_calling
@@ -25,6 +26,7 @@ SCORERS: dict[str, Scorer] = {
     "safety": score_safety,
     "agent_session": score_agent_session,
     "data_ops": score_data_ops,
+    "reply_triage": score_reply_triage,
 }
 
 __all__ = ["SCORERS", "Scorer", "score_record"]

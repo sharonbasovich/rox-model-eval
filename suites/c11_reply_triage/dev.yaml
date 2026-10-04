@@ -1,0 +1,77 @@
+- id: unsub
+  category: unsubscribe
+  sender: A
+  reply: Please unsubscribe me from these emails.
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: unsub2
+  category: unsubscribe
+  sender: A
+  reply: Stop contacting me.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: ooo
+  category: out_of_office
+  sender: A
+  reply: 'Auto-reply: out until 3 November, limited email.'
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: ooo2
+  category: out_of_office
+  sender: A
+  reply: I'm on vacation this week and will respond on my return.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: ref
+  category: referral
+  sender: A
+  reply: You want Paul Meyer, our head of sales ops.
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: ref2
+  category: referral
+  sender: A
+  reply: Please reach out to Lina Cho instead, she owns tooling.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: q
+  category: question
+  sender: A
+  reply: Do you offer a free trial?
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: q2
+  category: question
+  sender: A
+  reply: Is there an API we could use?
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: int
+  category: interested
+  sender: A
+  reply: Let's talk, does Thursday work?
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: int2
+  category: interested
+  sender: A
+  reply: Yes please, interested.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: now
+  category: not_now
+  sender: A
+  reply: Reach back out after our offsite in January.
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: now2
+  category: not_now
+  sender: A
+  reply: Bad timing, maybe next quarter.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+- id: 'no'
+  category: not_interested
+  sender: A
+  reply: We're all set, thanks.
+  original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+    with Salesforce and builds it automatically.'
+- id: no2
+  category: not_interested
+  sender: A
+  reply: No need, we already have a tool for this.
+  original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'

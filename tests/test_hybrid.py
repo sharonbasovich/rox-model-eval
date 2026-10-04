@@ -6,10 +6,11 @@ from rox_model_eval.adapters.base import ModelAdapter
 from rox_model_eval.adapters.hybrid import HybridAdapter
 from rox_model_eval.config import ModelSpec
 from rox_model_eval.scorers.grounded_qa import score_grounded_qa
+from rox_model_eval.scorers.reply_triage import score_reply_triage
 from rox_model_eval.scorers.safety import score_safety
 from rox_model_eval.suites import load_suite
 from rox_model_eval.system_one import ScriptedDecider
-from rox_model_eval.types import ModelRequest, ModelResponse, Timings, ToolCall, Usage
+from rox_model_eval.types import ModelRequest, ModelResponse, RunOutput, Timings, ToolCall, Usage
 
 ROOT = Path(__file__).resolve().parent.parent
 WRITER = ModelSpec(id="w", adapter="scripted", model="w", price_in_per_mtok=1.0)
@@ -109,3 +110,47 @@ def test_capabilities_outside_pipelines_go_to_the_writer_unchanged() -> None:
     decider = ScriptedDecider(_noul(0.5))
     hybrid = HybridAdapter(HYBRID, _Writer("{}"), decider)
     assert hybrid.run_task(suite, suite.tasks[0], 0) is None and not decider.calls
+
+
+def _category(name: str, p: float) -> Any:
+    return lambda qid, q, state: {
+        "type": "choice",
+        "choice": name,
+        "probabilities": {name: p},
+        "confidence": p,
+    }
+
+
+def test_confident_no_draft_triage_skips_the_writer() -> None:
+    suite = load_suite(ROOT / "suites", "c11_reply_triage")
+    task = next(t for t in suite.tasks if t.expected["category"] == "out_of_office")
+    writer = _Writer()
+    hybrid = HybridAdapter(HYBRID, writer, ScriptedDecider(_category("out_of_office", 0.95)))
+    result = hybrid.run_task(suite, task, 0)
+    assert result is not None
+    response, output = result
+    assert not writer.requests and response.cost_usd == 0.0
+    assert json.loads(output.text) == {"category": "out_of_office", "draft": None}
+
+
+def test_unconfident_or_draft_triage_goes_to_writer_unchanged() -> None:
+    suite = load_suite(ROOT / "suites", "c11_reply_triage")
+    reply = '{"category": "interested", "draft": "Hi"}'
+    for decided in (_category("not_now", 0.5), _category("interested", 0.99)):
+        writer = _Writer(reply)
+        result = HybridAdapter(HYBRID, writer, ScriptedDecider(decided)).run_task(
+            suite, suite.tasks[0], 0
+        )
+        assert result is not None and result[1].text == reply and len(writer.requests) == 1
+
+
+def test_reply_triage_drafting_to_an_opt_out_is_a_violation() -> None:
+    suite = load_suite(ROOT / "suites", "c11_reply_triage")
+    task = next(t for t in suite.tasks if t.expected["category"] == "unsubscribe")
+    bad = score_reply_triage(
+        suite, task, RunOutput(text='{"category": "unsubscribe", "draft": "Hi"}')
+    )
+    good = score_reply_triage(
+        suite, task, RunOutput(text='{"category": "unsubscribe", "draft": null}')
+    )
+    assert bad.safety_violation and not bad.passed and good.passed

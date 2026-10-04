@@ -120,4 +120,15 @@ models:
     params:
       writer: gpt-6-luna
       decider: { model: convaiinnovations/laya, revision: 55cf4c4ebb4e, device: cpu }
-      pipelines: [c3_insights, c4_grounded_qa, c8_safety]
+      pipelines: [c3_insights, c4_grounded_qa, c8_safety, c11_reply_triage]
+
+  # Same pair, Laya always decides the reply category (no confidence gate): shows what
+  # the gate buys.
+  - id: laya-always+gpt-6-luna
+    adapter: hybrid
+    model: laya-always+gpt-6-luna
+    params:
+      writer: gpt-6-luna
+      decider: { model: convaiinnovations/laya, revision: 55cf4c4ebb4e, device: cpu }
+      pipelines: [c11_reply_triage]
+      triage_confidence: 0.0
