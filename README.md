@@ -87,6 +87,31 @@ gateway if one exists and access is granted. Anthropic uses `adapter: anthropic`
 A judge from the same family as a candidate can favour it; for decisions prefer a judge from a
 different provider, or rely on the deterministic columns.
 
+## Hybrid: local System One decider + LLM writer
+
+`laya+gpt-6-luna` (in `config/models.yaml`) pairs Laya (`convaiinnovations/laya`, Apache-2.0),
+an open-weight non-autoregressive decision model with a ModernBERT encoder and a decision
+head, with gpt-6-luna. Laya is a System One-style model; it is **not** TypeSafe's Jev. It
+only answers typed questions (noul / choice / score) and never writes text. Luna writes all
+text, and exact maths, counting and CRM state stay in code.
+
+Where Laya decides (`rox_model_eval/adapters/hybrid.py`):
+- C4: "do the records state the fact?" A confident no means the hybrid abstains without calling luna.
+- C8: an injection screen on untrusted content, a gate on every tool call and a leak check on the reply.
+- C3: picks the top item; it ranks only when confident, otherwise luna ranks.
+
+Every other capability goes straight to luna. Laya's own claimed calibration is the vendor's
+claim; this benchmark measures it on these tasks.
+
+```bash
+pip install -e '.[laya]'          # torch CPU + laya; weights download to HF_HOME (~1.7 GB)
+HF_HOME=~/local-models/hf python -m rox_model_eval run \
+  --models laya+gpt-6-luna,gpt-6-luna,gpt-6-sol --suite c3_insights,c4_grounded_qa,c8_safety --reps 1
+```
+
+Laya runs in-process on CPU and its cost is counted as $0 (hardware not priced). Its
+latency is added to the attempt because every decision sits on the critical path.
+
 ## Evaluating a newly released model
 
 1. Add an entry to `config/models.yaml` (`adapter`, `model`, `api_key_env`, current prices).

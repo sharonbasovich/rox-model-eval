@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from ..config import ModelSpec
-from ..types import ModelRequest, ModelResponse
+from ..types import ModelRequest, ModelResponse, RunOutput, Suite, Task
 
 
 class ModelAdapter(ABC):
@@ -18,3 +18,9 @@ class ModelAdapter(ABC):
 
     @abstractmethod
     def complete(self, request: ModelRequest) -> ModelResponse: ...
+
+    def run_task(
+        self, suite: Suite, task: Task, rep: int
+    ) -> tuple[ModelResponse, RunOutput] | None:
+        """Own the whole attempt instead of the default loop; None means use the default."""
+        return None

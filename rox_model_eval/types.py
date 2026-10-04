@@ -50,6 +50,8 @@ class ModelResponse(BaseModel):
     timings: Timings = Field(default_factory=Timings)
     provider_version: str | None = None
     error: str | None = None
+    cost_usd: float | None = None
+    decisions: list[str] = Field(default_factory=list)
 
 
 class ModelRequest(BaseModel):

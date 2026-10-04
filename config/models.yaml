@@ -110,3 +110,14 @@ models:
   #   model: rox-default
   #   base_url: https://<rox-gateway-host>/v1
   #   api_key_env: ROX_GATEWAY_API_KEY
+
+  # Hybrid: Laya, an open-weight System One decision model (not TypeSafe's Jev), makes
+  # typed decisions locally on CPU; gpt-6-luna writes all text. Needs `pip install -e '.[laya]'`.
+  # Revision is pinned to the 2026-09-24 weights.
+  - id: laya+gpt-6-luna
+    adapter: hybrid
+    model: laya+gpt-6-luna
+    params:
+      writer: gpt-6-luna
+      decider: { model: convaiinnovations/laya, revision: 55cf4c4ebb4e, device: cpu }
+      pipelines: [c3_insights, c4_grounded_qa, c8_safety]

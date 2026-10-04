@@ -4,113 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 from .adapters import ModelAdapter, build_adapter
 from .config import ModelSpec
-from .crm_sim import CrmBackend
 from .judge import JUDGE_WEIGHT, judge_rubric, pairwise
+from .loop import execute
 from .scorers import SCORERS
-from .tools_sim import simulate_tool
 from .types import (
     Attempt,
-    Message,
-    ModelRequest,
     ModelResponse,
     RunOutput,
     ScoreBreakdown,
     Suite,
     Task,
-    Timings,
-    ToolCall,
-    Usage,
 )
 
 ProgressFn = Callable[[Attempt], None]
 
-
-def _oracle(task: Task) -> dict[str, Any]:
-    """Hints for the offline simulator only: the reference answer and what an attack wants."""
-    exp = task.expected
-    oracle: dict[str, Any] = {
-        "reference": task.reference_output if task.reference_output is not None else exp
-    }
-    tempting = [*exp.get("canaries", []), *exp.get("protected", [])]
-    if tempting:
-        oracle["tempting_text"] = tempting[0]
-    if exp.get("forbidden_tools"):
-        oracle["tempting_call"] = {
-            "name": exp["forbidden_tools"][0],
-            "arguments": exp.get("tempting_arguments", {}),
-        }
-    return oracle
-
-
-def execute(
-    adapter: ModelAdapter, suite: Suite, task: Task, rep: int
-) -> tuple[ModelResponse, RunOutput]:
-    """One attempt. With tools, loops model -> tool results -> model until a final answer.
-
-    Tasks with `inputs.followups` are multi-turn sessions: after each final answer the next
-    user message is appended and the loop continues with the full history. Tasks with
-    `inputs.crm` run against a stateful backend whose end state is returned for scoring.
-    """
-    messages = suite.render(task)
-    oracle = _oracle(task) if adapter.spec.adapter == "mock" else None
-    crm = CrmBackend(task.inputs["crm"]) if "crm" in task.inputs else None
-    followups: list[str] = [str(f) for f in task.inputs.get("followups", [])]
-    usage = Usage()
-    ttft: float | None = None
-    total = 0.0
-    trajectory: list[ToolCall] = []
-    turn_texts: list[str] = []
-    last = ModelResponse()
-    for turn in range(1 + len(followups)):
-        if turn:
-            messages.append(Message(role="assistant", content=last.text))
-            messages.append(Message(role="user", content=followups[turn - 1]))
-        for step in range(suite.max_steps if suite.tools else 1):
-            last = adapter.complete(
-                ModelRequest(
-                    messages=messages,
-                    tools=suite.tools,
-                    json_schema=suite.json_schema,
-                    params={"rep": rep},
-                    offline_oracle=oracle,
-                )
-            )
-            usage.add(last.usage)
-            total += last.timings.total_s
-            if ttft is None:
-                ttft = last.timings.ttft_s
-            if last.error or not last.tool_calls or not suite.tools:
-                break
-            calls = [
-                c if c.id else c.model_copy(update={"id": f"call_{turn}_{step}_{i}"})
-                for i, c in enumerate(last.tool_calls)
-            ]
-            trajectory += calls
-            messages.append(Message(role="assistant", content=last.text, tool_calls=calls))
-            messages += [
-                Message(
-                    role="tool",
-                    content=crm.call(c) if crm else simulate_tool(task, c),
-                    tool_call_id=c.id,
-                )
-                for c in calls
-            ]
-        turn_texts.append(last.text)
-        if last.error:
-            break
-    combined = last.model_copy(
-        update={"usage": usage, "timings": Timings(ttft_s=ttft, total_s=total)}
-    )
-    return combined, RunOutput(
-        text=last.text,
-        trajectory=trajectory,
-        turn_texts=turn_texts,
-        final_state=crm.state if crm else None,
-    )
+__all__ = ["execute", "run_suite", "score_attempt"]
 
 
 def score_attempt(
@@ -164,9 +75,9 @@ def _attempt(
     rep: int,
     judge_adapter: ModelAdapter | None,
 ) -> Attempt:
-    response, output = execute(adapter, suite, task, rep)
+    response, output = adapter.run_task(suite, task, rep) or execute(adapter, suite, task, rep)
     scores = score_attempt(suite, task, response, output)
-    cost = spec.cost_usd(response.usage)
+    cost = response.cost_usd if response.cost_usd is not None else spec.cost_usd(response.usage)
     if judge_adapter and not response.error:
         oracle = None
         if judge_adapter.spec.adapter == "mock":
