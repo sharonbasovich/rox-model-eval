@@ -1,0 +1,70 @@
+capability: c10_data_ops
+name: Bulk data operations on CRM-sized tables
+description: >
+  Rox-style CSV upload and data-hygiene jobs at realistic size: deduplicating a 200-row
+  contact list, reconciling CRM ARR against a billing export, rolling up multi-currency
+  pipeline, and validating an import file. Tables are generated deterministically from a
+  seed and the answer key is computed by applying the stated rules to the generated rows.
+  Every id and number must be exactly right; one missed row fails the task.
+scorer: data_ops
+system: >
+  You are the data-operations step of a revenue platform. Apply the stated rules exactly
+  to every row. Do not skip rows or estimate. Respond with a single JSON object and
+  nothing else.
+prompt_template: |
+  {{instructions}}
+
+  DATA:
+  <<<
+  {{data}}
+  >>>
+tasks:
+  - id: c10-001-dedupe-200-contacts
+    tags: [hard, scale, dedupe, csv-upload]
+    inputs:
+      dataset_spec: {kind: dedupe_contacts, seed: 11, n: 200}
+      instructions: |
+        Find duplicate contacts in this CSV. Two rows are duplicates if EITHER:
+          (a) their emails are equal after trimming whitespace and ignoring case, OR
+          (b) their company names are equal ignoring case AND their phone numbers have the
+              same digits (ignore spaces, dashes, dots, brackets and a leading +1).
+        Duplicates are transitive: if A matches B and B matches C, all three are one group.
+        Same name alone is NOT a match, and the same phone at a different company is NOT a match.
+        Return {"duplicate_groups": [[ids...], ...]} listing every group of 2 or more rows.
+  - id: c10-002-reconcile-crm-vs-billing
+    tags: [hard, scale, reconciliation, join]
+    inputs:
+      dataset_spec: {kind: reconcile_billing, seed: 12, n: 150}
+      instructions: |
+        Reconcile the CRM against the billing export. Match a billing row to a CRM account
+        when the domains are equal after lowercasing and removing any "http://" or
+        "https://" prefix, a leading "www." and a trailing "/". Do not strip any other
+        subdomain ("app.x.com" is not "x.com").
+        For matched pairs, flag the CRM account if |arr_usd - 12 * mrr_usd| > 1.
+        Return {"arr_mismatches": [CRM ids], "missing_in_crm": [billing ids with no CRM
+        match], "missing_in_billing": [CRM ids with no billing match]}.
+  - id: c10-003-multicurrency-rollup
+    tags: [hard, scale, aggregate, arithmetic]
+    inputs:
+      dataset_spec: {kind: pipeline_rollup, seed: 13, n: 200}
+      instructions: |
+        Compute each owner's open Q4 2026 pipeline in USD. Open means stage is discovery,
+        proposal or negotiation. Q4 2026 means close_date from 2026-10-01 to 2026-12-31
+        inclusive. Convert with EUR = 1.10 USD and GBP = 1.25 USD, sum per owner, and round
+        each owner's total to the nearest dollar. Owners are distinct people even if their
+        names look alike. Include every owner that appears in the data, with 0 if none.
+        Return {"q4_open_pipeline_usd": {"<owner>": <integer>, ...}}.
+  - id: c10-004-validate-import-file
+    tags: [hard, scale, validation, csv-upload]
+    inputs:
+      dataset_spec: {kind: csv_import_validation, seed: 14, n: 200}
+      instructions: |
+        Validate the import file before it is uploaded to the CRM. Check each row against
+        these rules IN THIS ORDER and report only the first rule it breaks:
+          1. missing_company: company is empty or only whitespace.
+          2. invalid_email: after trimming, the email must have exactly one "@", no spaces,
+             and a domain part containing a dot followed by at least 2 letters.
+          3. bad_employee_count: employee_count must be blank or digits only.
+          4. duplicate_existing: the trimmed email matches an EXISTING CRM EMAIL, ignoring case.
+        Return {"invalid_rows": {"<row_id>": "<rule name>", ...}} with only the rows that
+        break a rule.

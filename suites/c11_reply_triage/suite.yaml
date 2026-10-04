@@ -1,0 +1,787 @@
+capability: c11_reply_triage
+name: Inbound reply triage
+description: >
+  Modeled on Rox's campaigns surface: every reply to an outbound sequence has to be sorted
+  so the sequence can stop, snooze or hand off, and only replies that need a human-style
+  answer get a drafted response. One task = one reply, as replies arrive one at a time.
+  Synthetic replies; the categories and priority rules are defined below, not taken from Rox.
+scorer: reply_triage
+system: >
+  You triage replies to a sales rep's outbound emails. Pick exactly one category, applying
+  the FIRST rule that fits:
+  unsubscribe (asks to stop emailing / be removed, however politely, even if it also says
+  something else) > out_of_office (an automatic away/leave reply, even if it names a backup
+  contact) > referral (says someone else is the right person and names them) > question
+  (asks something specific they want answered) > interested (positive, wants to talk or
+  see more) > not_now (open but explicitly later: a future quarter, after an event, "ping
+  me in ...") > not_interested (declines). For referral, question and interested write a
+  short reply draft from the rep that uses only the SELLER FACTS (never invent numbers,
+  customers or features; if the facts don't cover a question, say you'll confirm) and ends
+  with a clear next step. For every other category the draft is null. Respond with JSON
+  only: {"category": "<category>", "draft": "<text>" | null}.
+json_schema:
+  type: object
+  properties:
+    category:
+      type: string
+      enum: [unsubscribe, out_of_office, referral, question, interested, not_now, not_interested]
+    draft: {type: [string, "null"]}
+  required: [category, draft]
+  additionalProperties: false
+prompt_template: |
+  SELLER FACTS:
+  Ledgerline is revenue-reporting software. SOC 2 Type II certified. Native Salesforce and
+  HubSpot sync. Data hosted in the US or EU (customer's choice). 14-day free pilot. Pricing
+  is per seat and quoted after a 20-minute scoping call. The rep is Avery Moss.
+
+  ORIGINAL EMAIL (from Avery): {{original}}
+
+  REPLY from {{sender}}:
+  {{reply}}
+tasks:
+- id: c11-001-unsub-polite
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Priya Raman
+    reply: Hi Avery, thanks, but please take me off your list. Have a good week.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: unsubscribe
+    must_mention: []
+- id: c11-002-unsub-with-referral
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Tom Ekberg
+    reply: Not me. Talk to Dana Ruiz in RevOps if anything. And please stop emailing me.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: unsubscribe
+    must_mention: []
+- id: c11-003-unsub-gdpr
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Lena Vogt
+    reply: Under GDPR I'm asking you to delete my details and not contact me again.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: unsubscribe
+    must_mention: []
+- id: c11-004-unsub-short
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Marco Bell
+    reply: remove
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: unsubscribe
+    must_mention: []
+- id: c11-005-ooo-backup
+  tags:
+  - out_of_office
+  inputs:
+    sender: Sara Lind
+    reply: 'Automatic reply: I''m on parental leave until 2026-11-30 with limited access to email. For
+      urgent matters contact Jonas Berg (jberg@kestrel.io).'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: out_of_office
+    must_mention: []
+- id: c11-006-ooo-conference
+  tags:
+  - out_of_office
+  inputs:
+    sender: Ravi Shah
+    reply: I'm out of the office at a conference through Friday and will reply when I'm back. This is
+      an automated message.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: out_of_office
+    must_mention: []
+- id: c11-007-ooo-plain
+  tags:
+  - out_of_office
+  inputs:
+    sender: Hannah Cole
+    reply: Thank you for your email. I am currently away and will return on Monday 12 October.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: out_of_office
+    must_mention: []
+- id: c11-008-ref-revops
+  tags:
+  - referral
+  inputs:
+    sender: Owen Price
+    reply: 'I''m not the right person for this. Mei Tanaka runs our RevOps stack, loop her in: mei@brightkeel.com'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Mei
+- id: c11-009-ref-cfo
+  tags:
+  - referral
+  inputs:
+    sender: Julia Novak
+    reply: Board reporting sits with our CFO, Daniel Okafor. I've cc'd him here.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Daniel
+- id: c11-010-ref-soft
+  tags:
+  - referral
+  inputs:
+    sender: Chris Dunn
+    reply: Probably better for Aisha Karim, she owns our Salesforce instance.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: referral
+    must_mention:
+    - Aisha
+- id: c11-011-ref-left
+  tags:
+  - referral
+  inputs:
+    sender: Kim Larsen
+    reply: Ben Ortiz used to handle this but left in August. Rachel Yoon took over his accounts.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Rachel
+- id: c11-012-q-soc2
+  tags:
+  - question
+  inputs:
+    sender: Nadia Fox
+    reply: 'Before anything else: are you SOC 2 certified? Our security team will ask.'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - SOC 2
+- id: c11-013-q-hubspot
+  tags:
+  - question
+  inputs:
+    sender: Leo Grant
+    reply: We're on HubSpot, not Salesforce. Does that work with you?
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - HubSpot
+- id: c11-014-q-eu
+  tags:
+  - question
+  inputs:
+    sender: Ingrid Sol
+    reply: Where would our data be stored? We need it to stay in the EU.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: question
+    must_mention:
+    - - EU
+      - Europe
+- id: c11-015-q-price
+  tags:
+  - question
+  inputs:
+    sender: Felix Moreau
+    reply: Interesting. What does this cost for a team of 12?
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - - scoping call
+      - quote
+      - call
+- id: c11-016-q-netsuite
+  tags:
+  - question
+  inputs:
+    sender: Gwen Park
+    reply: Do you integrate with NetSuite? That's where our billing lives.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - - confirm
+      - check
+      - get back
+- id: c11-017-int-call
+  tags:
+  - interested
+  inputs:
+    sender: Ama Boateng
+    reply: Yes, this is timely. Happy to chat next week.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: interested
+    must_mention:
+    - - call
+      - chat
+      - time
+      - meet
+- id: c11-018-int-pilot
+  tags:
+  - interested
+  inputs:
+    sender: Victor Han
+    reply: The pilot sounds good, let's set it up.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: interested
+    must_mention:
+    - - pilot
+- id: c11-019-int-forward
+  tags:
+  - interested
+  inputs:
+    sender: Ellie Shore
+    reply: Sounds useful. Send over some times and I'll bring my ops lead.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: interested
+    must_mention:
+    - - time
+      - call
+      - meet
+- id: c11-020-int-terse
+  tags:
+  - interested
+  inputs:
+    sender: Sam Reyes
+    reply: sure, tell me more
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: interested
+    must_mention:
+    - - call
+      - chat
+      - time
+      - pilot
+- id: c11-021-later-q1
+  tags:
+  - not_now
+  inputs:
+    sender: Petra Holm
+    reply: Not this quarter, we're mid-migration. Try me again in Q1.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_now
+    must_mention: []
+- id: c11-022-later-budget
+  tags:
+  - not_now
+  inputs:
+    sender: Yusuf Ali
+    reply: Budget is frozen until the new fiscal year in February. Happy to revisit then.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_now
+    must_mention: []
+- id: c11-023-later-ping
+  tags:
+  - not_now
+  inputs:
+    sender: Clara Webb
+    reply: Swamped with close right now. Ping me in a couple of months?
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_now
+    must_mention: []
+- id: c11-024-no-competitor
+  tags:
+  - not_interested
+  inputs:
+    sender: Dev Malik
+    reply: We just signed a three-year deal with another vendor, so no thanks.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_interested
+    must_mention: []
+- id: c11-025-no-inhouse
+  tags:
+  - not_interested
+  inputs:
+    sender: Rosa Lima
+    reply: We built our own reporting in-house and are happy with it. Pass.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_interested
+    must_mention: []
+- id: c11-026-no-short
+  tags:
+  - not_interested
+  inputs:
+    sender: Ian Fry
+    reply: Not interested.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_interested
+    must_mention: []
+- id: c11-027-no-nonfit
+  tags:
+  - not_interested
+  inputs:
+    sender: Bea Kraus
+    reply: We're a 4-person agency with no sales team, this isn't for us.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_interested
+    must_mention: []
+- id: c11-028-tricky-later-question
+  tags:
+  - question
+  inputs:
+    sender: Mo Adeyemi
+    reply: 'Maybe later this year, but first: do you sync with HubSpot?'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - HubSpot
+tasks:
+- id: c11-001-unsub-polite
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Priya Raman
+    reply: Hi Avery, thanks, but please take me off your list. Have a good week.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: unsubscribe
+    must_mention: []
+  reference_output:
+    category: unsubscribe
+    draft: null
+- id: c11-002-unsub-with-referral
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Tom Ekberg
+    reply: Not me. Talk to Dana Ruiz in RevOps if anything. And please stop emailing me.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: unsubscribe
+    must_mention: []
+  reference_output:
+    category: unsubscribe
+    draft: null
+- id: c11-003-unsub-gdpr
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Lena Vogt
+    reply: Under GDPR I'm asking you to delete my details and not contact me again.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: unsubscribe
+    must_mention: []
+  reference_output:
+    category: unsubscribe
+    draft: null
+- id: c11-004-unsub-short
+  tags:
+  - unsubscribe
+  inputs:
+    sender: Marco Bell
+    reply: remove
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: unsubscribe
+    must_mention: []
+  reference_output:
+    category: unsubscribe
+    draft: null
+- id: c11-005-ooo-backup
+  tags:
+  - out_of_office
+  inputs:
+    sender: Sara Lind
+    reply: 'Automatic reply: I''m on parental leave until 2026-11-30 with limited access to email. For
+      urgent matters contact Jonas Berg (jberg@kestrel.io).'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: out_of_office
+    must_mention: []
+  reference_output:
+    category: out_of_office
+    draft: null
+- id: c11-006-ooo-conference
+  tags:
+  - out_of_office
+  inputs:
+    sender: Ravi Shah
+    reply: I'm out of the office at a conference through Friday and will reply when I'm back. This is
+      an automated message.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: out_of_office
+    must_mention: []
+  reference_output:
+    category: out_of_office
+    draft: null
+- id: c11-007-ooo-plain
+  tags:
+  - out_of_office
+  inputs:
+    sender: Hannah Cole
+    reply: Thank you for your email. I am currently away and will return on Monday 12 October.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: out_of_office
+    must_mention: []
+  reference_output:
+    category: out_of_office
+    draft: null
+- id: c11-008-ref-revops
+  tags:
+  - referral
+  inputs:
+    sender: Owen Price
+    reply: 'I''m not the right person for this. Mei Tanaka runs our RevOps stack, loop her in: mei@brightkeel.com'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Mei
+  reference_output:
+    category: referral
+    draft: Thanks for the reply. Mei - would a short call next week work? I'll confirm the details. Avery
+- id: c11-009-ref-cfo
+  tags:
+  - referral
+  inputs:
+    sender: Julia Novak
+    reply: Board reporting sits with our CFO, Daniel Okafor. I've cc'd him here.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Daniel
+  reference_output:
+    category: referral
+    draft: Thanks for the reply. Daniel - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-010-ref-soft
+  tags:
+  - referral
+  inputs:
+    sender: Chris Dunn
+    reply: Probably better for Aisha Karim, she owns our Salesforce instance.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: referral
+    must_mention:
+    - Aisha
+  reference_output:
+    category: referral
+    draft: Thanks for the reply. Aisha - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-011-ref-left
+  tags:
+  - referral
+  inputs:
+    sender: Kim Larsen
+    reply: Ben Ortiz used to handle this but left in August. Rachel Yoon took over his accounts.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: referral
+    must_mention:
+    - Rachel
+  reference_output:
+    category: referral
+    draft: Thanks for the reply. Rachel - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-012-q-soc2
+  tags:
+  - question
+  inputs:
+    sender: Nadia Fox
+    reply: 'Before anything else: are you SOC 2 certified? Our security team will ask.'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - SOC 2
+  reference_output:
+    category: question
+    draft: Thanks for the reply. SOC 2 - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-013-q-hubspot
+  tags:
+  - question
+  inputs:
+    sender: Leo Grant
+    reply: We're on HubSpot, not Salesforce. Does that work with you?
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - HubSpot
+  reference_output:
+    category: question
+    draft: Thanks for the reply. HubSpot - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-014-q-eu
+  tags:
+  - question
+  inputs:
+    sender: Ingrid Sol
+    reply: Where would our data be stored? We need it to stay in the EU.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: question
+    must_mention:
+    - - EU
+      - Europe
+  reference_output:
+    category: question
+    draft: Thanks for the reply. EU - would a short call next week work? I'll confirm the details. Avery
+- id: c11-015-q-price
+  tags:
+  - question
+  inputs:
+    sender: Felix Moreau
+    reply: Interesting. What does this cost for a team of 12?
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - - scoping call
+      - quote
+      - call
+  reference_output:
+    category: question
+    draft: Thanks for the reply. scoping call - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-016-q-netsuite
+  tags:
+  - question
+  inputs:
+    sender: Gwen Park
+    reply: Do you integrate with NetSuite? That's where our billing lives.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - - confirm
+      - check
+      - get back
+  reference_output:
+    category: question
+    draft: Thanks for the reply. confirm - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-017-int-call
+  tags:
+  - interested
+  inputs:
+    sender: Ama Boateng
+    reply: Yes, this is timely. Happy to chat next week.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: interested
+    must_mention:
+    - - call
+      - chat
+      - time
+      - meet
+  reference_output:
+    category: interested
+    draft: Thanks for the reply. call - would a short call next week work? I'll confirm the details. Avery
+- id: c11-018-int-pilot
+  tags:
+  - interested
+  inputs:
+    sender: Victor Han
+    reply: The pilot sounds good, let's set it up.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: interested
+    must_mention:
+    - - pilot
+  reference_output:
+    category: interested
+    draft: Thanks for the reply. pilot - would a short call next week work? I'll confirm the details.
+      Avery
+- id: c11-019-int-forward
+  tags:
+  - interested
+  inputs:
+    sender: Ellie Shore
+    reply: Sounds useful. Send over some times and I'll bring my ops lead.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: interested
+    must_mention:
+    - - time
+      - call
+      - meet
+  reference_output:
+    category: interested
+    draft: Thanks for the reply. time - would a short call next week work? I'll confirm the details. Avery
+- id: c11-020-int-terse
+  tags:
+  - interested
+  inputs:
+    sender: Sam Reyes
+    reply: sure, tell me more
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: interested
+    must_mention:
+    - - call
+      - chat
+      - time
+      - pilot
+  reference_output:
+    category: interested
+    draft: Thanks for the reply. call - would a short call next week work? I'll confirm the details. Avery
+- id: c11-021-later-q1
+  tags:
+  - not_now
+  inputs:
+    sender: Petra Holm
+    reply: Not this quarter, we're mid-migration. Try me again in Q1.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_now
+    must_mention: []
+  reference_output:
+    category: not_now
+    draft: null
+- id: c11-022-later-budget
+  tags:
+  - not_now
+  inputs:
+    sender: Yusuf Ali
+    reply: Budget is frozen until the new fiscal year in February. Happy to revisit then.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_now
+    must_mention: []
+  reference_output:
+    category: not_now
+    draft: null
+- id: c11-023-later-ping
+  tags:
+  - not_now
+  inputs:
+    sender: Clara Webb
+    reply: Swamped with close right now. Ping me in a couple of months?
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_now
+    must_mention: []
+  reference_output:
+    category: not_now
+    draft: null
+- id: c11-024-no-competitor
+  tags:
+  - not_interested
+  inputs:
+    sender: Dev Malik
+    reply: We just signed a three-year deal with another vendor, so no thanks.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_interested
+    must_mention: []
+  reference_output:
+    category: not_interested
+    draft: null
+- id: c11-025-no-inhouse
+  tags:
+  - not_interested
+  inputs:
+    sender: Rosa Lima
+    reply: We built our own reporting in-house and are happy with it. Pass.
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: not_interested
+    must_mention: []
+  reference_output:
+    category: not_interested
+    draft: null
+- id: c11-026-no-short
+  tags:
+  - not_interested
+  inputs:
+    sender: Ian Fry
+    reply: Not interested.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_interested
+    must_mention: []
+  reference_output:
+    category: not_interested
+    draft: null
+- id: c11-027-no-nonfit
+  tags:
+  - not_interested
+  inputs:
+    sender: Bea Kraus
+    reply: We're a 4-person agency with no sales team, this isn't for us.
+    original: 'Following up on revenue reporting: would a 14-day pilot be useful for your Q4 close?'
+  expected:
+    category: not_interested
+    must_mention: []
+  reference_output:
+    category: not_interested
+    draft: null
+- id: c11-028-tricky-later-question
+  tags:
+  - question
+  inputs:
+    sender: Mo Adeyemi
+    reply: 'Maybe later this year, but first: do you sync with HubSpot?'
+    original: 'Quick question: how is your team reporting pipeline to the board today? Ledgerline syncs
+      with Salesforce and builds it automatically.'
+  expected:
+    category: question
+    must_mention:
+    - HubSpot
+  reference_output:
+    category: question
+    draft: Thanks for the reply. HubSpot - would a short call next week work? I'll confirm the details.
+      Avery

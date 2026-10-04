@@ -42,7 +42,12 @@ def score_grounded_qa(suite: Suite, task: Task, output: RunOutput) -> ScoreBreak
     invalid = [c for c in citations if c not in valid]
     notes += [f"cites nonexistent record {c!r}" for c in invalid]
     required = exp.get("required_citations", [])
-    recall = sum(1 for r in required if r in citations) / len(required) if required else 1.0
+    cited_ids = {c.split(":", 1)[-1] for c in citations}
+    recall = (
+        sum(1 for r in required if r.split(":", 1)[-1] in cited_ids) / len(required)
+        if required
+        else 1.0
+    )
     cov, missing = coverage(answer, exp.get("answer_mentions", []))
     notes += [f"answer missing: {m}" for m in missing]
     derived = [

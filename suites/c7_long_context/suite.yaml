@@ -104,3 +104,55 @@ tasks:
         integration_required: ["Snowflake"]
         region: ["EMEA"]
     reference_output: {current_tool: "Pipestack", contract_end: "March 31", integration_required: "Snowflake", region: "EMEA"}
+
+  - id: c7-005-triple-revision-40k
+    tags: [hard, 40k-words, multi-revision, arithmetic]
+    inputs:
+      fields: budget, seats, go_live_date
+      transcript_spec:
+        seed: 55
+        target_words: 40000
+        needles:
+          - {depth: 0.9, text: "Customer: Final word from finance: the budget is locked at $128,000. That replaces both earlier numbers."}
+          - {depth: 0.3, text: "Customer: Let's start with 40 seats for the sales team."}
+          - {depth: 0.7, text: "Customer: And add 25 more seats for customer success on day one, so the order covers both teams."}
+          - {depth: 0.6, text: "Customer: Our target go-live is January 12."}
+        distractors:
+          - {depth: 0.1, text: "Customer: Budget-wise we're thinking around $150,000."}
+          - {depth: 0.45, text: "Customer: Finance trimmed it, the budget is now $135,000."}
+          - {depth: 0.5, text: "Rep: For reference, list price for that package would be $160,000."}
+    expected:
+      fields:
+        budget: ["128,000", "128000", "128k"]
+        seats: ["65"]
+        go_live_date: ["January 12", "Jan 12", "01-12"]
+      traps:
+        budget: ["150,000", "150000", "150k", "135,000", "135000", "135k", "160,000", "160000", "160k"]
+        seats: ["40", "25"]
+    reference_output: {budget: "$128,000", seats: 65, go_live_date: "January 12"}
+
+  - id: c7-006-speaker-attribution-60k
+    tags: [hard, 60k-words, attribution]
+    inputs:
+      fields: competitor_being_evaluated, primary_blocker, final_decision_maker
+      transcript_spec:
+        seed: 66
+        target_words: 60000
+        needles:
+          - {depth: 0.8, text: "Customer: The other vendor we're seriously evaluating is Clari."}
+          - {depth: 0.55, text: "Customer: Honestly, the thing that could kill this is data residency. Everything has to stay in the EU."}
+          - {depth: 0.35, text: "Customer: I'm recommending it, but Tomas Lindqvist, our COO, makes the final call."}
+        distractors:
+          - {depth: 0.2, text: "Rep: A lot of teams your size also look at Gong, for what it's worth."}
+          - {depth: 0.65, text: "Customer: Our CFO, Anna Berg, will review the paperwork once it's agreed."}
+          - {depth: 0.4, text: "Customer: Pricing is fine, that's not a concern for us."}
+    expected:
+      fields:
+        competitor_being_evaluated: ["Clari"]
+        primary_blocker: ["data residency", "EU"]
+        final_decision_maker: ["Tomas Lindqvist"]
+      traps:
+        competitor_being_evaluated: ["Gong"]
+        primary_blocker: ["pricing", "price"]
+        final_decision_maker: ["Anna Berg"]
+    reference_output: {competitor_being_evaluated: "Clari", primary_blocker: "Data residency: everything must stay in the EU", final_decision_maker: "Tomas Lindqvist (COO)"}

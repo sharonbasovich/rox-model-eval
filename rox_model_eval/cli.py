@@ -19,7 +19,7 @@ from .adapters import build_adapter
 from .aggregate import overall, recommend, routing_table, summarize
 from .config import ModelSpec, load_models, load_weights
 from .judge import calibrate, load_labels
-from .report import RunReport, write_run
+from .report import CapabilityInfo, RunReport, write_run
 from .runner import pairwise_vs_baseline, run_suite
 from .suites import ALL_SUITES, load_suite, resolve_suites, suite_hash
 from .types import Attempt
@@ -46,12 +46,22 @@ def _pick(specs: dict[str, ModelSpec], ids: list[str]) -> list[ModelSpec] | None
     return [specs[m] for m in ids]
 
 
+def _with_effort(spec: ModelSpec, effort: str) -> ModelSpec:
+    if spec.adapter != "openai_responses":
+        return spec
+    return spec.model_copy(update={"params": {**spec.params, "reasoning": {"effort": effort}}})
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     specs = load_models(args.models_file)
     chosen = _pick(specs, [m.strip() for m in args.models.split(",") if m.strip()])
     judge = _pick(specs, [args.judge]) if args.judge else []
     if chosen is None or judge is None:
         return 2
+    if args.reasoning_effort:
+        chosen = [_with_effort(s, args.reasoning_effort) for s in chosen]
+        judge = [_with_effort(s, args.reasoning_effort) for s in judge]
+        specs = {**specs, **{s.id: s for s in chosen + judge}}
     judge_spec = judge[0] if judge else None
     weights = load_weights(args.weights_file)
     names = resolve_suites(args.suite)
@@ -61,16 +71,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     attempts: list[Attempt] = []
     pairwise: dict[str, dict[str, float]] = {}
     hashes: dict[str, str] = {}
+    info: dict[str, CapabilityInfo] = {}
     baseline = next((s.id for s in chosen if s.baseline), None)
     for name in names:
         suite = load_suite(args.suites_dir, name)
         hashes[suite.capability] = suite_hash(args.suites_dir, name)
+        info[suite.capability] = CapabilityInfo(
+            name=suite.name, description=" ".join(suite.description.split()), tasks=len(suite.tasks)
+        )
         print(
             f"{suite.capability}: {len(suite.tasks)} tasks x {args.reps} reps "
             f"x {len(chosen)} models ",
             end="",
         )
-        rows = run_suite(chosen, suite, args.reps, _progress, judge_spec)
+        rows = run_suite(chosen, suite, args.reps, _progress, judge_spec, args.workers)
         print()
         attempts += rows
         if judge_spec and baseline and suite.judge_rubric and not args.no_pairwise:
@@ -94,6 +108,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         routing=routing_table(summaries, weights),
         regressions=regressions,
         simulated=any(specs[a.model_id].adapter == "mock" for a in attempts),
+        capability_info=info,
+        weights=weights,
     )
     label = names[0] if len(names) == 1 else f"{len(names)}suites"
     scorecard = write_run(Path(args.out) / f"{run_id}-{label}", report, attempts)
@@ -101,7 +117,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     for o in report.overall:
         print(
             f"  {o.model_id:<22} {o.verdict:<9} fitness={o.fitness:.3f} "
-            f"$/task={o.cost_per_task_usd:.5f} {'; '.join(o.reasons)}"
+            f"$/task={o.cost_per_task_usd:.5f} s/task={o.latency_per_task_s:.1f} "
+            f"{' '.join(o.reasons)}"
         )
     for g in regressions:
         print(f"  REGRESSION {g.model_id} {g.capability} {g.metric}: {g.previous} -> {g.current}")
@@ -162,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--suite", default="all", help="'all' or comma-separated suite names")
     run.add_argument("--reps", type=int, default=3)
     run.add_argument("--judge", help="model id to use as LLM judge for rubric suites")
+    run.add_argument("--workers", type=int, default=1, help="concurrent attempts")
+    run.add_argument(
+        "--reasoning-effort", help="override reasoning.effort for Responses-API models"
+    )
     run.add_argument("--no-pairwise", action="store_true", help="skip pairwise judge vs baseline")
     run.add_argument("--out", default="runs")
     run.add_argument("--history", default="runs/history.sqlite")

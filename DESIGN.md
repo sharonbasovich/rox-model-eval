@@ -2,6 +2,12 @@
 
 **Author:** Sharon Basovich · **Status:** Design (v1) · **Audience:** Gopal (Head of Applied AI) + applied-AI team
 
+> **Where this comes from (read first).** The capability list is grounded in Rox's product
+> surfaces as observed while exploring Rox's web app (the `rox-scan` pass): chat agent,
+> `insights_v2`, enrichment, deals, campaigns, CSV upload. The task data is synthetic. Rox's
+> internal prompts, traffic mix and production model choices were not visible, so capability
+> weights are equal and no baseline model is assumed; those are to confirm with the Rox team.
+
 ---
 
 ## 0. TL;DR

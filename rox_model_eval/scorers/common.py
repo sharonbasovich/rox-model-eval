@@ -32,8 +32,11 @@ def parse_json(text: str) -> Any:
         return None
 
 
+_QUOTES = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'})
+
+
 def norm(text: Any) -> str:
-    return re.sub(r"\s+", " ", str(text).lower()).strip()
+    return re.sub(r"\s+", " ", str(text).translate(_QUOTES).lower()).strip()
 
 
 def mentions(text: str, alternatives: str | Iterable[str]) -> bool:

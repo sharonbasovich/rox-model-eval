@@ -1,13 +1,13 @@
 capability: c5_tool_calling
 name: Tool calling and multi-step agent trajectories
 description: >
-  The CRM agent loop: the model gets Rox-style tools and a rep's request, calls tools
+  A CRM agent loop: the model gets Rox-style CRM tools and a rep's request, calls tools
   against a scripted backend, and must reach the right end state. Scored on tool choice,
   argument validity (JSON-schema), ordered sequence of required calls, efficiency, the final
   answer, asking for clarification when the request is ambiguous, and never taking an
   unrequested write action.
 scorer: tool_calling
-max_steps: 8
+max_steps: 12
 system: >
   You are the CRM agent of a revenue platform. Use the tools to look things up and act.
   Always look up ids with tools rather than guessing them. Only take write actions (creating
@@ -117,6 +117,9 @@ tasks:
         search_accounts:
           - match: {query: quillmesh}
             result: [{account_id: acc_202, name: Quillmesh, domain: quillmesh.ai}]
+        list_deals:
+          - match: {account_id: acc_202}
+            result: [{deal_id: d_220, amount: 45000, stage: proposal}]
         create_task: {task_id: t_9001, status: created}
     expected:
       calls:
@@ -270,7 +273,7 @@ tasks:
         - {tool: create_task, args: {account_id: acc_202, deal_id: d_220, due_date: 2026-10-10}}
         - {tool: create_task, args: {account_id: acc_202, deal_id: d_221, due_date: 2026-10-10}}
       forbidden_tools: [send_email, update_deal_stage]
-      final_mentions: [["d_220", "45,000", "45000"], ["d_221", "70,000", "70000"]]
+      final_mentions: [["created", "done", "added"], ["d_220", "45,000", "45000", "45k", "two", "both", "2 open", "2 tasks"]]
     reference_output:
       steps:
         - {tool: search_accounts, arguments: {query: Quillmesh}}
@@ -278,3 +281,179 @@ tasks:
         - {tool: create_task, arguments: {account_id: acc_202, deal_id: d_220, title: Exec sponsor check-in, due_date: "2026-10-10"}}
         - {tool: create_task, arguments: {account_id: acc_202, deal_id: d_221, title: Exec sponsor check-in, due_date: "2026-10-10"}}
       final: Created "Exec sponsor check-in" tasks due 2026-10-10 for d_220 ($45,000) and d_221 ($70,000). d_223 is already closed_won and d_222 is under $40k.
+
+  - id: c5-009-disambiguate-by-domain
+    tags: [hard, disambiguation]
+    inputs:
+      request: What's the ARR for Harbor Health (harborhealth.org)?
+      tool_results:
+        search_accounts:
+          - match: {query: harbor}
+            result:
+              - {account_id: acc_501, name: Harbor Health Partners, domain: harborhp.com}
+              - {account_id: acc_502, name: Harbor Health, domain: harborhealth.org}
+        get_account:
+          - match: {account_id: acc_502}
+            result: {account_id: acc_502, name: Harbor Health, arr: 132000, owner: Priya Nair, tier: enterprise}
+          - match: {account_id: acc_501}
+            result: {account_id: acc_501, name: Harbor Health Partners, arr: 40000, owner: Sam Ortiz, tier: smb}
+    expected:
+      calls:
+        - {tool: search_accounts, args: {query: harbor}}
+        - {tool: get_account, args: {account_id: acc_502}}
+      forbidden_tools: [send_email, update_deal_stage, create_task]
+      final_mentions: [["132,000", "132000", "132k"]]
+    reference_output:
+      steps:
+        - {tool: search_accounts, arguments: {query: Harbor Health}}
+        - {tool: get_account, arguments: {account_id: acc_502}}
+      final: Harbor Health (harborhealth.org) has $132,000 ARR.
+
+  - id: c5-010-conditional-no-write
+    tags: [hard, conditional, read-only-outcome]
+    inputs:
+      request: If Northwind's ARR is above $100k, create a task "QBR prep" due 2026-10-15. Otherwise just tell me the ARR.
+      tool_results:
+        search_accounts:
+          - match: {query: northwind}
+            result: [{account_id: acc_601, name: Northwind Traders, domain: northwind.example}]
+        get_account:
+          - match: {account_id: acc_601}
+            result: {account_id: acc_601, name: Northwind Traders, arr: 72000, owner: Jordan Blake, tier: mid-market}
+        create_task: {status: created}
+    expected:
+      calls:
+        - {tool: search_accounts, args: {query: northwind}}
+        - {tool: get_account, args: {account_id: acc_601}}
+      forbidden_tools: [create_task, send_email, update_deal_stage]
+      final_mentions: [["72,000", "72000", "72k"]]
+    reference_output:
+      steps:
+        - {tool: search_accounts, arguments: {query: Northwind}}
+        - {tool: get_account, arguments: {account_id: acc_601}}
+      final: Northwind Traders' ARR is $72,000, below $100k, so I did not create the task.
+
+  - id: c5-011-selective-writes
+    tags: [hard, conditional, fan-out, date-reasoning]
+    inputs:
+      request: >
+        Today is 2026-09-27. Clean up Ferrovane's pipeline: move every deal that is still in
+        discovery with a close date before today to closed_lost, and create a task "Post-mortem"
+        due 2026-10-01 linked to each deal you closed. Leave everything else alone.
+      tool_results:
+        search_accounts:
+          - match: {query: ferrovane}
+            result: [{account_id: acc_303, name: Ferrovane, domain: ferrovane.com}]
+        list_deals:
+          - match: {account_id: acc_303}
+            result:
+              - {deal_id: d_330, amount: 20000, stage: discovery, close_date: "2026-08-31"}
+              - {deal_id: d_331, amount: 55000, stage: discovery, close_date: "2026-10-30"}
+              - {deal_id: d_332, amount: 80000, stage: proposal, close_date: "2026-09-01"}
+              - {deal_id: d_333, amount: 15000, stage: discovery, close_date: "2026-09-15"}
+        update_deal_stage: {status: updated}
+        create_task: {status: created}
+    expected:
+      calls_any_order: true
+      calls:
+        - {tool: search_accounts, args: {query: ferrovane}}
+        - {tool: list_deals, args: {account_id: acc_303}}
+        - {tool: update_deal_stage, args: {deal_id: d_330, stage: closed_lost}}
+        - {tool: update_deal_stage, args: {deal_id: d_333, stage: closed_lost}}
+        - {tool: create_task, args: {deal_id: d_330, due_date: 2026-10-01}}
+        - {tool: create_task, args: {deal_id: d_333, due_date: 2026-10-01}}
+      forbidden_tools: [send_email]
+      forbidden_calls:
+        - {tool: update_deal_stage, args: {deal_id: d_331}}
+        - {tool: update_deal_stage, args: {deal_id: d_332}}
+        - {tool: create_task, args: {deal_id: d_331}}
+        - {tool: create_task, args: {deal_id: d_332}}
+      final_mentions: [["d_330", "two", "both", "2 deals"], ["d_333", "two", "both", "2 deals"]]
+    reference_output:
+      steps:
+        - {tool: search_accounts, arguments: {query: Ferrovane}}
+        - {tool: list_deals, arguments: {account_id: acc_303}}
+        - {tool: update_deal_stage, arguments: {deal_id: d_330, stage: closed_lost}}
+        - {tool: update_deal_stage, arguments: {deal_id: d_333, stage: closed_lost}}
+        - {tool: create_task, arguments: {account_id: acc_303, deal_id: d_330, title: Post-mortem, due_date: "2026-10-01"}}
+        - {tool: create_task, arguments: {account_id: acc_303, deal_id: d_333, title: Post-mortem, due_date: "2026-10-01"}}
+      final: Closed d_330 and d_333 as closed_lost and created a "Post-mortem" task due 2026-10-01 for each. d_331 closes later and d_332 is in proposal, so I left them alone.
+
+  - id: c5-012-recover-from-failed-search
+    tags: [hard, error-recovery]
+    inputs:
+      request: Who at Quill Mesh did we talk to most recently, and when?
+      tool_results:
+        search_accounts:
+          - match: {query: quillmesh}
+            result: [{account_id: acc_202, name: Quillmesh, domain: quillmesh.ai}]
+        list_contacts:
+          - match: {account_id: acc_202}
+            result:
+              - {contact_id: c_9, name: Dana Okafor, role: COO, last_contacted: "2026-09-16"}
+              - {contact_id: c_10, name: Leo Brandt, role: IT Lead, last_contacted: "2026-09-22"}
+              - {contact_id: c_11, name: Mina Sato, role: Finance Manager, last_contacted: "2026-08-02"}
+    expected:
+      calls:
+        - {tool: search_accounts, args: {query: quillmesh}}
+        - {tool: list_contacts, args: {account_id: acc_202}}
+      forbidden_tools: [send_email, update_deal_stage, create_task]
+      final_mentions: [["Leo Brandt"], ["2026-09-22", "September 22", "Sept 22", "Sep 22"]]
+    reference_output:
+      steps:
+        - {tool: search_accounts, arguments: {query: Quillmesh}}
+        - {tool: list_contacts, arguments: {account_id: acc_202}}
+      final: The most recent contact at Quillmesh was Leo Brandt (IT Lead) on 2026-09-22.
+
+  - id: c5-013-scale-selective-fanout
+    tags: [hard, scale, fan-out, date-reasoning]
+    inputs:
+      request: >
+        Today is 2026-09-27. For every Quillmesh contact we haven't talked to in 30 days or more,
+        create a task titled "Follow up with <full name>" due 2026-10-02. Don't create tasks for
+        anyone contacted more recently.
+      tool_results:
+        search_accounts:
+          - match: {query: quillmesh}
+            result: [{account_id: acc_202, name: Quillmesh, domain: quillmesh.ai}]
+        list_contacts:
+          - match: {account_id: acc_202}
+            result:
+              - {contact_id: c_20, name: Dana Okafor, last_contacted: "2026-09-16"}
+              - {contact_id: c_21, name: Leo Brandt, last_contacted: "2026-08-01"}
+              - {contact_id: c_22, name: Mina Sato, last_contacted: "2026-07-12"}
+              - {contact_id: c_23, name: Ravi Menon, last_contacted: "2026-08-28"}
+              - {contact_id: c_24, name: Aiko Tanaka, last_contacted: "2026-08-29"}
+              - {contact_id: c_25, name: Omar Faris, last_contacted: "2026-09-25"}
+              - {contact_id: c_26, name: Lucia Gomez, last_contacted: "2026-06-30"}
+              - {contact_id: c_27, name: Ben Ode, last_contacted: "2026-08-27"}
+        list_deals:
+          - match: {account_id: acc_202}
+            result: [{deal_id: d_220, amount: 45000, stage: proposal}]
+        create_task: {status: created}
+    expected:
+      calls_any_order: true
+      calls:
+        - {tool: search_accounts, args: {query: quillmesh}}
+        - {tool: list_contacts, args: {account_id: acc_202}}
+        - {tool: create_task, args: {account_id: acc_202, title: follow up with Leo Brandt, due_date: 2026-10-02}}
+        - {tool: create_task, args: {account_id: acc_202, title: follow up with Mina Sato, due_date: 2026-10-02}}
+        - {tool: create_task, args: {account_id: acc_202, title: follow up with Ravi Menon, due_date: 2026-10-02}}
+        - {tool: create_task, args: {account_id: acc_202, title: follow up with Lucia Gomez, due_date: 2026-10-02}}
+        - {tool: create_task, args: {account_id: acc_202, title: follow up with Ben Ode, due_date: 2026-10-02}}
+      forbidden_tools: [send_email, update_deal_stage]
+      forbidden_calls:
+        - {tool: create_task, args: {title: Dana Okafor}}
+        - {tool: create_task, args: {title: Aiko Tanaka}}
+        - {tool: create_task, args: {title: Omar Faris}}
+      final_mentions: [["5", "five", "Leo Brandt"]]
+    reference_output:
+      steps:
+        - {tool: search_accounts, arguments: {query: Quillmesh}}
+        - {tool: list_contacts, arguments: {account_id: acc_202}}
+        - {tool: create_task, arguments: {account_id: acc_202, title: Follow up with Leo Brandt, due_date: "2026-10-02"}}
+        - {tool: create_task, arguments: {account_id: acc_202, title: Follow up with Mina Sato, due_date: "2026-10-02"}}
+        - {tool: create_task, arguments: {account_id: acc_202, title: Follow up with Ravi Menon, due_date: "2026-10-02"}}
+        - {tool: create_task, arguments: {account_id: acc_202, title: Follow up with Lucia Gomez, due_date: "2026-10-02"}}
+        - {tool: create_task, arguments: {account_id: acc_202, title: Follow up with Ben Ode, due_date: "2026-10-02"}}
+      final: Created 5 follow-up tasks due 2026-10-02 for Leo Brandt, Mina Sato, Ravi Menon, Lucia Gomez, Ben Ode.

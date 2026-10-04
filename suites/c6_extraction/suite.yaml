@@ -1,5 +1,5 @@
 capability: c6_extraction
-name: Structured extraction into Rox account/contact records
+name: Structured extraction into Rox-style account/contact records
 description: >
   Messy real-world inputs (email signatures, forwarded threads, CSV rows, LinkedIn-style
   blurbs) mapped into a strict record. All companies and people are synthetic. Several
@@ -14,6 +14,9 @@ prompt_template: |
   Extract a record with these fields: company_name, domain, contact_name, contact_title,
   contact_email, employee_count (integer), hq_city, funding_stage (one of: seed,
   series_a, series_b, series_c_plus, public, bootstrapped, or null).
+  Field meanings: domain is the company's website domain, or the domain of the contact's
+  work email if no website is given. hq_city is the city given for the company or in the
+  contact's signature. employee_count is the stated headcount for the target company.
 
   INPUT:
   <<<
@@ -211,3 +214,65 @@ tasks:
       employee_count: null
       hq_city: null
       funding_stage: null
+
+  - id: c6-011-title-changed-in-thread
+    tags: [hard, thread, latest-wins]
+    inputs:
+      source_text: |
+        From: Ines Carvalho <ines@tidepool.io>
+        Sent: 2026-09-20
+        Quick update: I've moved into a new role as VP, Sales Operations, effective this month. Same email.
+
+        Ines Carvalho
+        VP, Sales Operations | Tidepool
+
+        -----Original Message-----
+        From: Ines Carvalho <ines@tidepool.io>
+        Sent: 2026-06-02
+        Happy to set up time next week.
+        Ines Carvalho | Director of Sales Ops | Tidepool | HQ: Lisbon | 85 employees
+    expected:
+      company_name: Tidepool
+      domain: tidepool.io
+      contact_name: Ines Carvalho
+      contact_title: VP, Sales Operations
+      contact_email: ines@tidepool.io
+      employee_count: 85
+      hq_city: Lisbon
+      funding_stage: null
+
+  - id: c6-012-international-formats
+    tags: [hard, locale, number-format, stage-mapping]
+    inputs:
+      source_text: |
+        Kontakt: Jonas Weber, Leiter Vertrieb
+        Nordlicht Robotik GmbH · HQ: Munich
+        www.nordlicht-robotik.de · j.weber@nordlicht-robotik.de
+        ca. 1.200 Mitarbeiter · Series D (2025)
+    expected:
+      company_name: Nordlicht Robotik GmbH
+      domain: nordlicht-robotik.de
+      contact_name: Jonas Weber
+      contact_title: Leiter Vertrieb
+      contact_email: j.weber@nordlicht-robotik.de
+      employee_count: 1200
+      hq_city: Munich
+      funding_stage: series_c_plus
+
+  - id: c6-013-two-companies
+    tags: [hard, entity-trap, attribution]
+    inputs:
+      source_text: |
+        [CRM import - target account: Tessaract Freight]
+        Press note: Kestrel Logistics (kestrel.com), a 5,000-employee carrier network, announced a
+        partnership with Tessaract Freight, a Series C freight audit company headquartered in Chicago.
+        Media contact for Tessaract: Omar Haddad, CEO, omar@tessaract.io
+    expected:
+      company_name: Tessaract Freight
+      domain: tessaract.io
+      contact_name: Omar Haddad
+      contact_title: CEO
+      contact_email: omar@tessaract.io
+      employee_count: null
+      hq_city: Chicago
+      funding_stage: series_c_plus

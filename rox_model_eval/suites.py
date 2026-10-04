@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from .datagen import build_dataset, reference_answer
 from .types import Suite
 
 ALL_SUITES = [
@@ -20,6 +21,9 @@ ALL_SUITES = [
     "c6_extraction",
     "c7_long_context",
     "c8_safety",
+    "c9_agent_sessions",
+    "c10_data_ops",
+    "c11_reply_triage",
 ]
 
 _SPEAKERS = ["Rep", "Customer", "Customer (IT)", "Rep (SE)"]
@@ -74,6 +78,11 @@ def load_suite(suites_dir: str | Path, name: str) -> Suite:
         spec = task.inputs.get("transcript_spec")
         if isinstance(spec, dict):
             task.inputs["transcript"] = build_transcript(spec)
+        data_spec = task.inputs.get("dataset_spec")
+        if isinstance(data_spec, dict):
+            task.inputs["data"], computed = build_dataset(data_spec)
+            task.expected = {**computed, **task.expected}
+            task.reference_output = reference_answer(task.expected)
     return suite
 
 

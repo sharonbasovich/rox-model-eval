@@ -98,3 +98,81 @@ tasks:
     reference_output:
       ranking: [L2, L4, L3, L1]
       top_reason: L2 is a VP Sales who requested a demo today and has a competitor renewal next month.
+
+  - id: c3-006-expected-value-rules
+    tags: [hard, arithmetic, explicit-rules]
+    inputs:
+      question: >
+        Rank these open deals by expected value THIS QUARTER (quarter ends 2026-09-30), highest
+        first. Expected value = amount x stage probability (discovery 10%, proposal 30%,
+        negotiation 60%, verbal 80%). Halve the probability if the champion has left. Deals
+        closing after 2026-09-30 count as 0 this quarter. Break ties by larger amount first.
+      data: |
+        E1 $300k  stage=discovery    close=2026-09-25  champion=active
+        E2 $90k   stage=negotiation  close=2026-09-28  champion=active
+        E3 $150k  stage=verbal       close=2026-10-05  champion=active
+        E4 $120k  stage=negotiation  close=2026-09-30  champion=left
+        E5 $60k   stage=verbal       close=2026-09-20  champion=active
+        E6 $200k  stage=proposal     close=2026-09-29  champion=active
+        E7 $40k   stage=negotiation  close=2026-09-15  champion=active
+        E8 $500k  stage=discovery    close=2026-12-01  champion=active
+    expected:
+      ideal_order: [E6, E2, E5, E4, E1, E7, E8, E3]
+      top_reason_mentions: [["60k", "60,000", "$60", "60 000"]]
+    reference_output:
+      ranking: [E6, E2, E5, E4, E1, E7, E8, E3]
+      top_reason: E6 is worth $60k this quarter ($200k at 30% for proposal), the highest expected value.
+
+  - id: c3-007-renewal-risk-points
+    tags: [hard, explicit-rules, boundary-traps]
+    inputs:
+      question: >
+        Today is 2026-09-27. Rank these customers by churn-risk points, highest first. Points:
+        +3 if seat usage is below 30%; +2 if NPS is 6 or lower; +2 if open tickets are 5 or more;
+        +1 if renewal is within 30 days of today; +2 if the executive sponsor has left. Break ties
+        by earlier renewal date.
+      data: |
+        R1 renewal=2026-10-10  seats_used=10/50  nps=8  open_tickets=1  sponsor=active
+        R2 renewal=2026-12-01  seats_used=35/40  nps=5  open_tickets=7  sponsor=left
+        R3 renewal=2026-10-20  seats_used=12/40  nps=6  open_tickets=5  sponsor=active
+        R4 renewal=2027-02-01  seats_used=5/25   nps=9  open_tickets=0  sponsor=active
+        R5 renewal=2026-10-01  seats_used=45/50  nps=9  open_tickets=2  sponsor=active
+        R6 renewal=2026-11-15  seats_used=8/40   nps=4  open_tickets=2  sponsor=active
+        R7 renewal=2026-10-25  seats_used=30/30  nps=7  open_tickets=6  sponsor=active
+    expected:
+      ideal_order: [R2, R3, R6, R1, R7, R4, R5]
+      top_reason_mentions: [["sponsor"]]
+    reference_output:
+      ranking: [R2, R3, R6, R1, R7, R4, R5]
+      top_reason: R2 scores 6 points - the executive sponsor left, NPS is 5 and there are 7 open tickets.
+
+  - id: c3-008-scale-14-deals
+    tags: [hard, scale, arithmetic, explicit-rules]
+    inputs:
+      question: >
+        Rank these open deals by expected value THIS QUARTER (quarter ends 2026-09-30), highest
+        first. Probability by stage: discovery 10%, proposal 30%, negotiation 60%, verbal 80%.
+        Halve the probability if the champion has left. Then add 10 percentage points if 3 or
+        more contacts are engaged. Expected value = amount x probability; deals closing after
+        2026-09-30 count as 0. Break ties by larger amount first.
+      data: |
+        F01 $350k  stage=proposal    close=2026-09-06  champion=active  contacts_engaged=4
+        F02 $290k  stage=negotiation close=2026-10-14  champion=active  contacts_engaged=4
+        F03 $135k  stage=negotiation close=2026-09-06  champion=active  contacts_engaged=4
+        F04 $285k  stage=verbal      close=2026-09-15  champion=active  contacts_engaged=3
+        F05 $300k  stage=verbal      close=2026-09-17  champion=active  contacts_engaged=1
+        F06 $165k  stage=proposal    close=2026-09-03  champion=left    contacts_engaged=3
+        F07 $365k  stage=verbal      close=2026-10-06  champion=active  contacts_engaged=3
+        F08 $245k  stage=proposal    close=2026-10-22  champion=active  contacts_engaged=1
+        F09 $375k  stage=negotiation close=2026-10-24  champion=active  contacts_engaged=5
+        F10 $380k  stage=negotiation close=2026-09-22  champion=active  contacts_engaged=1
+        F11 $80k  stage=negotiation close=2026-09-06  champion=active  contacts_engaged=1
+        F12 $135k  stage=negotiation close=2026-10-21  champion=active  contacts_engaged=5
+        F13 $195k  stage=negotiation close=2026-10-27  champion=active  contacts_engaged=3
+        F14 $120k  stage=negotiation close=2026-09-09  champion=active  contacts_engaged=1
+    expected:
+      ideal_order: [F04, F05, F10, F01, F03, F14, F11, F06, F09, F07, F02, F08, F13, F12]
+      top_reason_mentions: [["F04"]]
+    reference_output:
+      ranking: [F04, F05, F10, F01, F03, F14, F11, F06, F09, F07, F02, F08, F13, F12]
+      top_reason: "F04 has the highest expected value this quarter (about $256,500)."

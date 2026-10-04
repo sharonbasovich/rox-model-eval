@@ -1,5 +1,7 @@
 # Candidate models. Prices are $ per 1M tokens; update when providers change them.
-# `baseline: true` marks the current production default (regression comparison point).
+# `baseline: true` marks the model you currently use, if you know it. Verdicts are then
+# relative to it. Without one, models are compared head-to-head (PASS / PARTIAL / HOLD).
+# The first baseline among the models selected for a run is used.
 models:
   # --- offline reference implementations: run the whole harness with zero API keys ---
   - id: mock-strong
@@ -17,27 +19,81 @@ models:
     price_out_per_mtok: 0.60
     params: { flaw_rate: 0.35, injection_rate: 0.2 }
 
-  # --- real candidates: uncomment once the matching key is in the environment ---
-  # Verify model ids and prices against the provider's pricing page before a real run.
-  # GPT-5-family reasoning models reject a custom `temperature`, so none is set.
-  # - id: gpt-frontier
-  #   adapter: openai
-  #   model: gpt-5
-  #   base_url: https://api.openai.com/v1
-  #   api_key_env: OPENAI_API_KEY
-  #   price_in_per_mtok: 1.25
-  #   price_out_per_mtok: 10.00
-  #   price_cached_in_per_mtok: 0.125
-  #
-  # - id: gpt-frontier-mini
-  #   adapter: openai
-  #   model: gpt-5-mini
-  #   base_url: https://api.openai.com/v1
-  #   api_key_env: OPENAI_API_KEY
-  #   price_in_per_mtok: 0.25
-  #   price_out_per_mtok: 2.00
-  #   price_cached_in_per_mtok: 0.025
-  #
+  # --- OpenAI GPT-6 (prices: https://developers.openai.com/api/docs/pricing, Standard tier) ---
+  # Every prompt in the suites is under the 272K-token long-context surcharge threshold.
+  # GPT-6 needs the Responses API for function tools with reasoning.
+  # `reasoning.effort: low` keeps the smoke benchmark cheap; raise it for decision runs.
+  - id: gpt-6-sol
+    adapter: openai_responses
+    model: gpt-6-sol
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 2.00
+    price_out_per_mtok: 10.00
+    price_cached_in_per_mtok: 0.20
+    params: { reasoning: { effort: low } }
+
+  - id: gpt-6.1-sol
+    adapter: openai_responses
+    model: gpt-6.1-sol
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 2.00
+    price_out_per_mtok: 10.00
+    price_cached_in_per_mtok: 0.10
+    params: { reasoning: { effort: low } }
+
+  - id: gpt-6-luna
+    adapter: openai_responses
+    model: gpt-6-luna
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 0.10
+    price_out_per_mtok: 0.50
+    price_cached_in_per_mtok: 0.01
+    params: { reasoning: { effort: low } }
+
+  - id: gpt-6-astra
+    adapter: openai_responses
+    model: gpt-6-astra
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 10.00
+    price_out_per_mtok: 50.00
+    price_cached_in_per_mtok: 1.00
+    params: { reasoning: { effort: low } }
+
+  # --- OpenAI GPT-5.6 (sol: pricing page; terra/luna: their model pages, Standard tier) ---
+  - id: gpt-5.6-sol
+    adapter: openai_responses
+    model: gpt-5.6-sol
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 4.00
+    price_out_per_mtok: 20.00
+    price_cached_in_per_mtok: 0.40
+    params: { reasoning: { effort: low } }
+
+  - id: gpt-5.6-terra
+    adapter: openai_responses
+    model: gpt-5.6-terra
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 2.00
+    price_out_per_mtok: 12.00
+    price_cached_in_per_mtok: 0.20
+    params: { reasoning: { effort: low } }
+
+  - id: gpt-5.6-luna
+    adapter: openai_responses
+    model: gpt-5.6-luna
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    price_in_per_mtok: 0.20
+    price_out_per_mtok: 1.20
+    price_cached_in_per_mtok: 0.02
+    params: { reasoning: { effort: low } }
+
   # - id: claude-frontier
   #   adapter: anthropic
   #   model: claude-sonnet-4-5
@@ -54,3 +110,25 @@ models:
   #   model: rox-default
   #   base_url: https://<rox-gateway-host>/v1
   #   api_key_env: ROX_GATEWAY_API_KEY
+
+  # Hybrid: Laya, an open-weight System One decision model (not TypeSafe's Jev), makes
+  # typed decisions locally on CPU; gpt-6-luna writes all text. Needs `pip install -e '.[laya]'`.
+  # Revision is pinned to the 2026-09-24 weights.
+  - id: laya+gpt-6-luna
+    adapter: hybrid
+    model: laya+gpt-6-luna
+    params:
+      writer: gpt-6-luna
+      decider: { model: convaiinnovations/laya, revision: 55cf4c4ebb4e, device: cpu }
+      pipelines: [c3_insights, c4_grounded_qa, c8_safety, c11_reply_triage]
+
+  # Same pair, Laya always decides the reply category (no confidence gate): shows what
+  # the gate buys.
+  - id: laya-always+gpt-6-luna
+    adapter: hybrid
+    model: laya-always+gpt-6-luna
+    params:
+      writer: gpt-6-luna
+      decider: { model: convaiinnovations/laya, revision: 55cf4c4ebb4e, device: cpu }
+      pipelines: [c11_reply_triage]
+      triage_confidence: 0.0

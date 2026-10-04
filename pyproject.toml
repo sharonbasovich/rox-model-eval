@@ -18,6 +18,12 @@ dev = [
   "types-PyYAML",
   "types-jsonschema",
 ]
+laya = [
+  "laya==0.3.21",
+  "torch==2.14.0",
+  "transformers==5.17.0",
+  "huggingface_hub>=1.5,<2.0",
+]
 
 [project.scripts]
 rox-eval = "rox_model_eval.cli:main"
